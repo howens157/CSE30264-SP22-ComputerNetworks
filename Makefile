@@ -11,3 +11,10 @@ client: client.o
 
 server: server.o
 	$(CC) $(CFLAGS) -o $@ $<
+
+clean:
+	rm -f client
+	rm -f client.o
+	rm -f server
+	rm -f server.o
+
