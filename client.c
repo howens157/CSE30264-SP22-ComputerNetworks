@@ -10,7 +10,7 @@
 
 #include <arpa/inet.h>
 
-#define PORT "3490" // the port client will be connecting to 
+//#define PORT "3490" // the port client will be connecting to 
 
 #define MAXDATASIZE 100 // max number of bytes we can get at once 
 
@@ -26,22 +26,37 @@ void *get_in_addr(struct sockaddr *sa)
 
 int main(int argc, char *argv[])
 {
-    int sockfd, numbytes;  
+		char* port = "0";
+		char* ip_addr = "0";
+		if (argc == 4) {
+			char* ip_addr = argv[1];
+			port = argv[2];
+			char* file = argv[3];
+			printf("%s\n", ip_addr);
+			printf("%s\n", port);
+			printf("%s\n", file);
+
+    } else {
+			fprintf(stderr, "usage: ./client ip_addr port file\n");
+			exit(1);
+		}
+		int sockfd, numbytes;  
     char buf[MAXDATASIZE];
     struct addrinfo hints, *servinfo, *p;
     int rv;
     char s[INET6_ADDRSTRLEN];
 
-    if (argc != 2) {
-        fprintf(stderr,"usage: client hostname\n");
-        exit(1);
-    }
-
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
+		
+		struct in_addr addr;
+		if (!inet_aton(ip_addr, &addr)) {
+			fprintf(stderr, "invalid ip addr\n");
+			exit(1);
+		}
 
-    if ((rv = getaddrinfo(argv[1], PORT, &hints, &servinfo)) != 0) {
+    if ((rv = getaddrinfo(ip_addr, port, &hints, &servinfo)) != 0) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
     }
