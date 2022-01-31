@@ -123,20 +123,12 @@ int main(int argc, char *argv[])
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s);
         printf("server: got connection from %s\n", s);
-        char buf[100];
-        if (!fork()) { // this is the child process
-            if(recv(sockfd, buf, 99, 0) == -1)
-                perror("receive");
-            close(sockfd);
-
-            printf("server received: %s\n", buf);
-
-            if (send(new_fd, "Hello, world!", 13, 0) == -1)
-                perror("send");
-            close(new_fd);
-            exit(0);
-        }
-        close(new_fd);  // parent doesn't need this
+        char buf[1024];
+        /*recv(new_fd, buf, 1024, 0);
+        printf("%d\n", buf);
+        memset(buf, 0, sizeof(buf));*/
+        recv(new_fd, buf, 1024, 0);
+        printf("%s\n", buf);
     }
 
     return 0;
