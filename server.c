@@ -51,8 +51,11 @@ int main(int argc, char *argv[])
     int rv;
     char *PORT;
 
-    if(argc != 2)
+    if(argc != 2){
+        printf("Problem with command line arguments");
+        printf("Format is: ./server [PORT]");
         exit(EXIT_FAILURE);
+    }
 
     PORT = argv[1];
 
@@ -124,19 +127,13 @@ int main(int argc, char *argv[])
             s, sizeof s);
         printf("server: got connection from %s\n", s);
         char buf[100];
-        if (!fork()) { // this is the child process
-            if(recv(sockfd, buf, 99, 0) == -1)
-                perror("receive");
-            close(sockfd);
+        if(recv(sockfd, buf, 99, 0) == -1) perror("receive");
+        close(sockfd);
 
-            printf("server received: %s\n", buf);
+        printf("server received: %s\n", buf);
 
-            if (send(new_fd, "Hello, world!", 13, 0) == -1)
-                perror("send");
-            close(new_fd);
-            exit(0);
-        }
-        close(new_fd);  // parent doesn't need this
+        if (send(new_fd, "Hello, world!", 13, 0) == -1) perror("send");
+        close(new_fd);
     }
 
     return 0;
