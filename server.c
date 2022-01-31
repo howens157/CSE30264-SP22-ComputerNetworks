@@ -51,8 +51,11 @@ int main(int argc, char *argv[])
     int rv;
     char *PORT;
 
-    if(argc != 2)
+    if(argc != 2){
+        printf("Problem with command line arguments");
+        printf("Format is: ./server [PORT]");
         exit(EXIT_FAILURE);
+    }
 
     PORT = argv[1];
 
@@ -123,6 +126,7 @@ int main(int argc, char *argv[])
             get_in_addr((struct sockaddr *)&their_addr),
             s, sizeof s);
         printf("server: got connection from %s\n", s);
+
         char buf[1024];
         /*recv(new_fd, buf, 1024, 0);
         printf("%d\n", buf);
