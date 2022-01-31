@@ -29,10 +29,11 @@ int main(int argc, char *argv[])
 {
 		char* port = "0";
 		char* ip_addr = "0";
+        char *file;
 		if (argc == 4) {
 			char* ip_addr = argv[1];
 			port = argv[2];
-			char* file = argv[3];
+			file = argv[3];
 			printf("%s\n", ip_addr);
 			printf("%s\n", port);
 			printf("%s\n", file);
@@ -90,14 +91,19 @@ int main(int argc, char *argv[])
 
     freeaddrinfo(servinfo); // all done with this structure
 
-    if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
+    /*if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
         perror("recv");
         exit(1);
     }
 
     buf[numbytes] = '\0';
 
-    printf("client: received '%s'\n",buf);
+    printf("client: received '%s'\n",buf);*/
+    
+    /*uint16_t filenamelen = (uint16_t)strlen(file);
+    filenamelen = htons(filenamelen);
+    send(sockfd, filenamelen, sizeof(filenamelen), 0);*/
+    send(sockfd, file, strlen(file), 0);
 
     close(sockfd);
 
