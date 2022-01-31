@@ -127,9 +127,7 @@ int main(int argc, char *argv[])
             s, sizeof s);
         printf("server: got connection from %s\n", s);
         char buf[100];
-        if(recv(sockfd, buf, 99, 0) == -1) perror("receive");
-        close(sockfd);
-
+        if(recv(new_fd, buf, 99, 0) == -1) perror("receive");
         printf("server received: %s\n", buf);
 
         if (send(new_fd, "Hello, world!", 13, 0) == -1) perror("send");
