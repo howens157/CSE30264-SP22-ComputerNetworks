@@ -7,6 +7,7 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 
 #include <arpa/inet.h>
 
@@ -106,7 +107,35 @@ int main(int argc, char *argv[])
     printf("%d\n", filenamelen);
     send(sockfd, &filenamelen, sizeof(filenamelen), 0);
     send(sockfd, file, strlen(file), 0);
+    
 
+    uint32_t fileSize;
+    recv(sockfd, &fileSize, sizeof(fileSize), 0);
+    fileSize = ntohl(fileSize);
+    printf("Got file size: %d\n", fileSize);
+
+    FILE *fdw = fopen("target.test", "w");
+
+    struct timeval tvalBefore, tvalAfter;
+
+    gettimeofday(&tvalBefore, NULL);
+
+    char bufToRead[MAXDATASIZE];
+    int numReadTotal = 0;
+    int numRead;
+    while(numReadTotal < fileSize) {
+        numRead = recv(sockfd, bufToRead, sizeof(bufToRead), 0);
+        numReadTotal += numRead;
+        printf("%d read, total: %d\n", numRead, numReadTotal);
+        fwrite(bufToRead, numRead, 1, fdw);
+    }
+    gettimeofday(&tvalAfter, NULL);
+    printf("%d %d\n", (int)tvalAfter.tv_sec - (int)tvalBefore.tv_sec, (int)tvalAfter.tv_usec - (int)tvalBefore.tv_usec);
+    double txTime = (tvalAfter.tv_sec - tvalBefore.tv_sec) + (tvalAfter.tv_usec - tvalBefore.tv_usec)/1000000.0;
+    double mbRead = numReadTotal/1048576.0;
+    double speed = mbRead/txTime;
+    printf("Transferred %lf Megabytes in %lf seconds for %lf Mb/s\n", mbRead, txTime, speed);
+    fclose(fdw);
     close(sockfd);
 
     return 0;

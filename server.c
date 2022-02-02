@@ -17,6 +17,7 @@
 
 
 #define BACKLOG 10   // how many pending connections queue will hold
+#define MAXDATASIZE 100
 
 void sigchld_handler(int s)
 {
@@ -114,6 +115,11 @@ int main(int argc, char *argv[])
 
     printf("server: waiting for connections...\n");
 
+    FILE *fdr; 
+    int numread;
+    uint32_t fileSize;
+    uint16_t filenamelen;
+    char bufToSend[MAXDATASIZE];
     while(1) {  // main accept() loop
         sin_size = sizeof their_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
@@ -130,10 +136,30 @@ int main(int argc, char *argv[])
         uint16_t filenamelen;
         recv(new_fd, &filenamelen, sizeof(uint16_t), 0);
         printf("%d\n", filenamelen);
-        char buf[filenamelen];
+        char buf[filenamelen+1];
         memset(buf, 0, sizeof(buf));
         recv(new_fd, buf, 1024, 0);
         printf("%s\n", buf);
+
+        fdr = fopen(buf, "r");
+        if(fdr == NULL) {
+            perror("File does not exist or could not be opened\n");
+        }
+
+        fseek(fdr, 0, SEEK_END);
+        fileSize = ftell(fdr);
+        fseek(fdr, 0, SEEK_SET);
+
+        fileSize = htonl(fileSize);
+        send(new_fd, &fileSize, sizeof(fileSize), 0);
+       
+        numread = fread(bufToSend, 1, MAXDATASIZE, fdr);
+        printf("read %d bytes\n", numread);
+        while(numread > 0) {
+            send(new_fd, bufToSend, numread, 0);
+            numread = fread(bufToSend, 1, MAXDATASIZE, fdr);
+            printf("read %d bytes\n", numread);
+        }
     }
 
     return 0;
