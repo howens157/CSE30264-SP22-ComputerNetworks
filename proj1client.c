@@ -43,11 +43,22 @@ int main(int argc, char *argv[])
     char* port = "0";
     char* ip_addr = "0";
     char *file;
+		int is_hostname = 1;
     if (argc == 4) {
         ip_addr = argv[1];
         port = argv[2];
         file = argv[3];
-        printf("Will attempt to connect to %s on port %s to retrieve %s\n", ip_addr, port, file);
+       
+				// check for valid ip address
+				if (strncmp(ip_addr, "0", 1) == 0 || strncmp(ip_addr, "1", 1) == 0 || strncmp(ip_addr, "2", 1) == 0) {
+					is_hostname = 0;
+					if (!(strncmp(ip_addr, "129.74.", 7) == 0 || strncmp(ip_addr, "127.", 4) == 0 || strncmp(ip_addr, "192.168.", 8) == 0)) {
+						fprintf(stderr, "Invalid ip address. Must be 129.74.*, 127.*, or 192.168.*\n");
+						exit(1);
+					}
+				}
+
+				printf("Will attempt to connect to %s on port %s to retrieve %s\n", ip_addr, port, file);
     } else {
         fprintf(stderr, "usage: ./client ip_addr port file\n");
         exit(1);
@@ -63,8 +74,8 @@ int main(int argc, char *argv[])
     hints.ai_socktype = SOCK_STREAM;
 		
 		struct in_addr addr;
-		if (!inet_aton(ip_addr, &addr)) {
-			fprintf(stderr, "invalid ip addr\n");
+		if (!is_hostname && !inet_aton(ip_addr, &addr)) {
+			fprintf(stderr, "invalid ip address\n");
 			exit(1);
 		}
 

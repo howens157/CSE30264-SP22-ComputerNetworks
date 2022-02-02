@@ -1,6 +1,8 @@
 # ComputerNetworksWork
 Computer Networks SP22 Work: Hayden Owens, Lauren Korbel, Riley Griffith
 
+## Extra Credit
+We are doing both extra credits
 
 ## Results - Average Rate of Transfer
 | Separate Hosts, Large File | Localhost, Large File | Separate Hosts, Small File | Localhost, Small File |

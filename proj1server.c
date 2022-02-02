@@ -61,8 +61,8 @@ int main(int argc, char *argv[])
     char *PORT;
 
     if(argc != 2){
-        printf("Problem with command line arguments");
-        printf("Format is: ./server [PORT]");
+        printf("Problem with command line arguments\n");
+        printf("Format is: ./server [PORT]\n");
         exit(EXIT_FAILURE);
     }
 
