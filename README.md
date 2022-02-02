@@ -15,29 +15,29 @@ Computer Networks SP22 Work: Hayden Owens, Lauren Korbel, Riley Griffith
 
 #### Extended Results
 Large file, separate host results:
-114.432638 Mb/s
-113.731667 Mb/s
-110.316853 Mb/s
-114.662228 Mb/s
-112.124724 Mb/s
-
-Small file, separate host results:
-2.600930 Mb/s
-2.600930 Mb/s
-2.600930 Mb/s
-2.384186 Mb/s
-2.200787 Mb/s
-
-Large file, localhost results:
-653.144717 Mb/s
-620.512413 Mb/s
-641.517210 Mb/s
-512.737144 Mb/s
-651.341896 Mb/s
-
-Small file, localhost results:
-2.600930 Mb/s
-2.384186 Mb/s
-2.600930 Mb/s
-2.384186 Mb/s
+114.432638 Mb/s\
+113.731667 Mb/s\
+110.316853 Mb/s\
+114.662228 Mb/s\
+112.124724 Mb/s\
+\
+Small file, separate host results:\
+2.600930 Mb/s\
+2.600930 Mb/s\
+2.600930 Mb/s\
+2.384186 Mb/s\
+2.200787 Mb/s\
+\
+Large file, localhost results:\
+653.144717 Mb/s\
+620.512413 Mb/s\
+641.517210 Mb/s\
+512.737144 Mb/s\
+651.341896 Mb/s\
+\
+Small file, localhost results:\
+2.600930 Mb/s\
+2.384186 Mb/s\
+2.600930 Mb/s\
+2.384186 Mb/s\
 2.200787 Mb/s
