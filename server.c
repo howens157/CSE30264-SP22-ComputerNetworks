@@ -1,5 +1,13 @@
-/* 
- ** server.c -- a stream socket server demo
+/* proj1server.c 
+ * 2/1/2022
+ * Hayden Owens, Lauren Korbel, Riley Griffith
+ * CSE30264 - Computer Networks
+ *
+ * This code implements a simple server that will accept a connection from a client 
+ * requesting a file transfer, and transfer that file over a network connection
+ *
+ * Usage:
+ *      ./proj1server PORT
 */
 
 #include <stdio.h>
@@ -17,7 +25,7 @@
 
 
 #define BACKLOG 10   // how many pending connections queue will hold
-#define MAXDATASIZE 100
+#define MAXDATASIZE 1024
 
 void sigchld_handler(int s)
 {
@@ -113,15 +121,16 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    printf("server: waiting for connections...\n");
 
+    //Variable declarations
     FILE *fdr; 
-    int numread;
+    int numread, numBytes;
     uint32_t fileSize;
     uint16_t filenamelen;
     char bufToSend[MAXDATASIZE];
 
     while(1) {  // main accept() loop
+        printf("server: waiting for connections...\n");
         sin_size = sizeof their_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
         if (new_fd == -1) {
@@ -134,34 +143,61 @@ int main(int argc, char *argv[])
             s, sizeof s);
         printf("server: got connection from %s\n", s);
 
-        uint16_t filenamelen;
-        recv(new_fd, &filenamelen, sizeof(uint16_t), 0);
-        printf("%d\n", filenamelen);
-        char buf[filenamelen+1];
-        memset(buf, 0, sizeof(buf));
-        recv(new_fd, buf, 1024, 0);
-        printf("%s\n", buf);
+        //receive the length of the filename from the client and decode it
+        numBytes = recv(new_fd, &filenamelen, sizeof(uint16_t), 0);
+        if(numBytes < 0) {
+            perror("Error receiving length of filename\n");
+            continue;
+        }
+        filenamelen = ntohs(filenamelen);
+        printf("Received length of filename: %d\n", filenamelen);
+        //create a buffer to store the filename and receive it from the client
+        char filename[filenamelen+1];
+        memset(filename, 0, sizeof(filename));
+        recv(new_fd, filename, 1024, 0);
+        if(numBytes < 0) {
+            perror("Error receiving filename\n");
+            continue;
+        }
+        printf("Received request to transfer: %s\n", filename);
 
-        fdr = fopen(buf, "r");
+        //attempt to open the file, if it does not exist, report an error
+        fdr = fopen(filename, "r");
         if(fdr == NULL) {
             perror("File does not exist or could not be opened\n");
             continue;
         }
 
+        //find the file size and then reset the file pointer to the beginning of the file
         fseek(fdr, 0, SEEK_END);
         fileSize = ftell(fdr);
         fseek(fdr, 0, SEEK_SET);
 
+        //encode file size to be sent over network and send to client
         fileSize = htonl(fileSize);
-        send(new_fd, &fileSize, sizeof(fileSize), 0);
-       
-        numread = fread(bufToSend, 1, MAXDATASIZE, fdr);
-        printf("read %d bytes\n", numread);
-        while(numread > 0) {
-            send(new_fd, bufToSend, numread, 0);
-            numread = fread(bufToSend, 1, MAXDATASIZE, fdr);
-            printf("read %d bytes\n", numread);
+        numBytes = send(new_fd, &fileSize, sizeof(fileSize), 0);
+        if(numBytes < 0) {
+            perror("Error sending file size\n");
+            continue;
         }
+       
+        //read the first chunk of data from the file
+        numread = fread(bufToSend, 1, MAXDATASIZE, fdr);
+        //while fread continues to read data (hasn't reached EOF)
+        while(numread > 0) {
+            //send a chunk to the client
+            numBytes = send(new_fd, bufToSend, numread, 0);
+            if(numBytes < 0) {
+                perror("Error receiving length of filename\n");
+            }
+            else {
+                //and read the next chunk from the file
+                numread = fread(bufToSend, 1, MAXDATASIZE, fdr);
+            }
+        }
+        fclose(fdr);
+        printf("Sent %s to client\n", filename);
+        close(new_fd);
     }
 
     return 0;

@@ -1,3 +1,15 @@
+/* proj1client.c
+ * 2/1/2022
+ * Hayden Owens, Lauren Korbel, Riley Griffith
+ * CSE30264 - Computer Networls
+ *
+ * This code implements a simple client that will connect to a server and retrieve a file
+ * over the network connection, saving it to target.test
+ *
+ * Usage:
+ *      ./proj1client IPADDR PORT FILENAME
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -14,7 +26,7 @@
 //#define PORT "3490" // the port client will be connecting to 
 #define PORT "41150" // the port client will be connecting to 
 
-#define MAXDATASIZE 100 // max number of bytes we can get at once 
+#define MAXDATASIZE 1024 // max number of bytes we can get at once 
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -32,13 +44,10 @@ int main(int argc, char *argv[])
     char* ip_addr = "0";
     char *file;
     if (argc == 4) {
-        char* ip_addr = argv[1];
+        ip_addr = argv[1];
         port = argv[2];
         file = argv[3];
-        printf("%s\n", ip_addr);
-        printf("%s\n", port);
-        printf("%s\n", file);
-
+        printf("Will attempt to connect to %s on port %s to retrieve %s\n", ip_addr, port, file);
     } else {
         fprintf(stderr, "usage: ./client ip_addr port file\n");
         exit(1);
@@ -72,7 +81,7 @@ int main(int argc, char *argv[])
             perror("client: socket");
             continue;
         }
-
+        
         if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
             close(sockfd);
             perror("client: connect");
@@ -94,21 +103,20 @@ int main(int argc, char *argv[])
     freeaddrinfo(servinfo); // all done with this structure
 
   
-    //New Stuff 
+    //Calculate the length of the filename, encode it to be sent over the network, and send to server
     uint16_t filenamelen = (uint16_t)strlen(file);
     filenamelen = htons(filenamelen);
-    filenamelen = ntohs(filenamelen);
-    printf("%d\n", filenamelen);
     numBytes = send(sockfd, &filenamelen, sizeof(filenamelen), 0);
     if(numBytes < 0) {
         perror("Error sending length of filename\n");
     }
+    //Send the filename to the server
     numBytes = send(sockfd, file, strlen(file), 0);
     if(numBytes < 0) {
         perror("Error sending filename\n");
     }
 
-
+    //Receive the filesize from the server
     uint32_t fileSize;
     numBytes = recv(sockfd, &fileSize, sizeof(fileSize), 0);
     if(numBytes < 0) {
@@ -117,32 +125,39 @@ int main(int argc, char *argv[])
     fileSize = ntohl(fileSize);
     printf("Got file size: %d\n", fileSize);
 
+    //create a target file to store the received file
     FILE *fdw = fopen("target.test", "w");
 
+    //timeval structs for calculating performance
     struct timeval tvalBefore, tvalAfter;
-
+    //get time before transfer
     gettimeofday(&tvalBefore, NULL);
 
+    //buffer to read data in to from network connection
     char bufToRead[MAXDATASIZE];
     int numReadTotal = 0;
     int numRead;
+    //while the whole file has not been read from the connection
     while(numReadTotal < fileSize) {
+        //read a new chunk
         numRead = recv(sockfd, bufToRead, sizeof(bufToRead), 0);
         if(numRead == 0) {
             perror("Connection Closed by Server\n");
             break;
         }
         else if(numRead < 0) {
-            perror("recv error\n");
+            perror("Error receiving file data\n");
             continue;
         }
+        //increment numReadTotal by the number of bytes just read and write the chunk to the target file
         numReadTotal += numRead;
-        printf("%d read, total: %d\n", numRead, numReadTotal);
         fwrite(bufToRead, numRead, 1, fdw);
     }
+    //get time after transfer is complete
     gettimeofday(&tvalAfter, NULL);
-    printf("%d %d\n", (int)tvalAfter.tv_sec - (int)tvalBefore.tv_sec, (int)tvalAfter.tv_usec - (int)tvalBefore.tv_usec);
+    //calculate transfer time in seconds
     double txTime = (tvalAfter.tv_sec - tvalBefore.tv_sec) + (tvalAfter.tv_usec - tvalBefore.tv_usec)/1000000.0;
+    //convert bytes to MB
     double mbRead = numReadTotal/1048576.0;
     double speed = mbRead/txTime;
     printf("Transferred %lf Megabytes in %lf seconds for %lf Mb/s\n", mbRead, txTime, speed);
