@@ -144,6 +144,7 @@ int main(int argc, char *argv[])
         fdr = fopen(buf, "r");
         if(fdr == NULL) {
             perror("File does not exist or could not be opened\n");
+            continue;
         }
 
         fseek(fdr, 0, SEEK_END);

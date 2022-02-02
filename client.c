@@ -28,23 +28,23 @@ void *get_in_addr(struct sockaddr *sa)
 
 int main(int argc, char *argv[])
 {
-		char* port = "0";
-		char* ip_addr = "0";
-        char *file;
-		if (argc == 4) {
-			char* ip_addr = argv[1];
-			port = argv[2];
-			file = argv[3];
-			printf("%s\n", ip_addr);
-			printf("%s\n", port);
-			printf("%s\n", file);
+    char* port = "0";
+    char* ip_addr = "0";
+    char *file;
+    if (argc == 4) {
+        char* ip_addr = argv[1];
+        port = argv[2];
+        file = argv[3];
+        printf("%s\n", ip_addr);
+        printf("%s\n", port);
+        printf("%s\n", file);
 
     } else {
-			fprintf(stderr, "usage: ./client ip_addr port file\n");
-			exit(1);
-		}
-		int sockfd, numbytes;  
-    char buf[MAXDATASIZE];
+        fprintf(stderr, "usage: ./client ip_addr port file\n");
+        exit(1);
+    }
+    int sockfd, numBytes;  
+    
     struct addrinfo hints, *servinfo, *p;
     int rv;
     char s[INET6_ADDRSTRLEN];
@@ -63,6 +63,7 @@ int main(int argc, char *argv[])
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
         return 1;
     }
+
 
     // loop through all the results and connect to the first we can
     for(p = servinfo; p != NULL; p = p->ai_next) {
@@ -92,25 +93,27 @@ int main(int argc, char *argv[])
 
     freeaddrinfo(servinfo); // all done with this structure
 
-    /*if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1) {
-        perror("recv");
-        exit(1);
-    }
-
-    buf[numbytes] = '\0';
-
-    printf("client: received '%s'\n",buf);*/
-    
+  
+    //New Stuff 
     uint16_t filenamelen = (uint16_t)strlen(file);
     filenamelen = htons(filenamelen);
     filenamelen = ntohs(filenamelen);
     printf("%d\n", filenamelen);
-    send(sockfd, &filenamelen, sizeof(filenamelen), 0);
-    send(sockfd, file, strlen(file), 0);
-    
+    numBytes = send(sockfd, &filenamelen, sizeof(filenamelen), 0);
+    if(numBytes < 0) {
+        perror("Error sending length of filename\n");
+    }
+    numBytes = send(sockfd, file, strlen(file), 0);
+    if(numBytes < 0) {
+        perror("Error sending filename\n");
+    }
+
 
     uint32_t fileSize;
-    recv(sockfd, &fileSize, sizeof(fileSize), 0);
+    numBytes = recv(sockfd, &fileSize, sizeof(fileSize), 0);
+    if(numBytes < 0) {
+        perror("Error sending file size\n");
+    }
     fileSize = ntohl(fileSize);
     printf("Got file size: %d\n", fileSize);
 
@@ -125,6 +128,14 @@ int main(int argc, char *argv[])
     int numRead;
     while(numReadTotal < fileSize) {
         numRead = recv(sockfd, bufToRead, sizeof(bufToRead), 0);
+        if(numRead == 0) {
+            perror("Connection Closed by Server\n");
+            break;
+        }
+        else if(numRead < 0) {
+            perror("recv error\n");
+            continue;
+        }
         numReadTotal += numRead;
         printf("%d read, total: %d\n", numRead, numReadTotal);
         fwrite(bufToRead, numRead, 1, fdw);
