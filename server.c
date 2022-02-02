@@ -127,10 +127,11 @@ int main(int argc, char *argv[])
             s, sizeof s);
         printf("server: got connection from %s\n", s);
 
-        char buf[1024];
-        /*recv(new_fd, buf, 1024, 0);
-        printf("%d\n", buf);
-        memset(buf, 0, sizeof(buf));*/
+        uint16_t filenamelen;
+        recv(new_fd, &filenamelen, sizeof(uint16_t), 0);
+        printf("%d\n", filenamelen);
+        char buf[filenamelen];
+        memset(buf, 0, sizeof(buf));
         recv(new_fd, buf, 1024, 0);
         printf("%s\n", buf);
     }

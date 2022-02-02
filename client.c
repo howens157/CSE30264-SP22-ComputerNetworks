@@ -100,9 +100,11 @@ int main(int argc, char *argv[])
 
     printf("client: received '%s'\n",buf);*/
     
-    /*uint16_t filenamelen = (uint16_t)strlen(file);
+    uint16_t filenamelen = (uint16_t)strlen(file);
     filenamelen = htons(filenamelen);
-    send(sockfd, filenamelen, sizeof(filenamelen), 0);*/
+    filenamelen = ntohs(filenamelen);
+    printf("%d\n", filenamelen);
+    send(sockfd, &filenamelen, sizeof(filenamelen), 0);
     send(sockfd, file, strlen(file), 0);
 
     close(sockfd);
