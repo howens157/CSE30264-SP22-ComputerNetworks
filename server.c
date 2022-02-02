@@ -120,6 +120,7 @@ int main(int argc, char *argv[])
     uint32_t fileSize;
     uint16_t filenamelen;
     char bufToSend[MAXDATASIZE];
+
     while(1) {  // main accept() loop
         sin_size = sizeof their_addr;
         new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
