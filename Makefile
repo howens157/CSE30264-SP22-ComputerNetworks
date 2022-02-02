@@ -1,20 +1,20 @@
 CC = gcc
 CFLAGS = -g -Wall -std=gnu99
 
-all: client server
+all: proj1client proj1server
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-client: client.o
+proj1client: proj1client.o
 	$(CC) $(CFLAGS) -o $@ $<
 
-server: server.o
+proj1server: proj1server.o
 	$(CC) $(CFLAGS) -o $@ $<
 
 clean:
-	rm -f client
-	rm -f client.o
-	rm -f server
-	rm -f server.o
+	rm -f proj1client
+	rm -f proj1client.o
+	rm -f proj1server
+	rm -f proj1server.o
 

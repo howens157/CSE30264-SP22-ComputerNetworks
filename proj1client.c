@@ -157,10 +157,8 @@ int main(int argc, char *argv[])
     gettimeofday(&tvalAfter, NULL);
     //calculate transfer time in seconds
     double txTime = (tvalAfter.tv_sec - tvalBefore.tv_sec) + (tvalAfter.tv_usec - tvalBefore.tv_usec)/1000000.0;
-    //convert bytes to MB
-    double mbRead = numReadTotal/1048576.0;
-    double speed = mbRead/txTime;
-    printf("Transferred %lf Megabytes in %lf seconds for %lf Mb/s\n", mbRead, txTime, speed);
+    double speed = numReadTotal/1048576.0/txTime;
+    printf("Transferred %d Megabytes in %lf seconds for %lf Mb/s\n", numReadTotal, txTime, speed);
     fclose(fdw);
     close(sockfd);
 
