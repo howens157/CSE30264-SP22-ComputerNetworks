@@ -1,1 +1,0 @@
-/Library/Developer/CommandLineTools/usr/bin/cc -g -isysroot /Library/Developer/CommandLineTools/SDKs/MacOSX11.1.sdk -Wl,-search_paths_first -Wl,-headerpad_max_install_names CMakeFiles/test1Formatted.dir/test1.c.o CMakeFiles/test1Formatted.dir/parse_flags.c.o -o test1Formatted  ../libjson-c.5.1.0.dylib 
