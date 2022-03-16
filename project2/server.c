@@ -22,6 +22,8 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <glib-object.h>
+#include <json-glib/json-glib.h>
 
 
 #define BACKLOG 10   // how many pending connections queue will hold
@@ -129,76 +131,33 @@ int main(int argc, char *argv[])
     uint16_t filenamelen;
     char bufToSend[MAXDATASIZE];
 
-    while(1) {  // main accept() loop
-        printf("server: waiting for connections...\n");
-        sin_size = sizeof their_addr;
-        new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
-        if (new_fd == -1) {
-            perror("accept");
-            continue;
-        }
-
-        inet_ntop(their_addr.ss_family,
-            get_in_addr((struct sockaddr *)&their_addr),
-            s, sizeof s);
-        printf("server: got connection from %s\n", s);
-
-        //receive the length of the filename from the client and decode it
-        numBytes = recv(new_fd, &filenamelen, sizeof(uint16_t), 0);
-        if(numBytes < 0) {
-            perror("Error receiving length of filename\n");
-            continue;
-        }
-        filenamelen = ntohs(filenamelen);
-        printf("Received length of filename: %d\n", filenamelen);
-        //create a buffer to store the filename and receive it from the client
-        char filename[filenamelen+1];
-        memset(filename, 0, sizeof(filename));
-        recv(new_fd, filename, 1024, 0);
-        if(numBytes < 0) {
-            perror("Error receiving filename\n");
-            continue;
-        }
-        printf("Received request to transfer: %s\n", filename);
-
-        //attempt to open the file, if it does not exist, report an error
-        fdr = fopen(filename, "r");
-        if(fdr == NULL) {
-            perror("File does not exist or could not be opened\n");
-            continue;
-        }
-
-        //find the file size and then reset the file pointer to the beginning of the file
-        fseek(fdr, 0, SEEK_END);
-        fileSize = ftell(fdr);
-        fseek(fdr, 0, SEEK_SET);
-
-        //encode file size to be sent over network and send to client
-        fileSize = htonl(fileSize);
-        numBytes = send(new_fd, &fileSize, sizeof(fileSize), 0);
-        if(numBytes < 0) {
-            perror("Error sending file size\n");
-            continue;
-        }
-       
-        //read the first chunk of data from the file
-        numread = fread(bufToSend, 1, MAXDATASIZE, fdr);
-        //while fread continues to read data (hasn't reached EOF)
-        while(numread > 0) {
-            //send a chunk to the client
-            numBytes = send(new_fd, bufToSend, numread, 0);
-            if(numBytes < 0) {
-                perror("Error receiving length of filename\n");
-            }
-            else {
-                //and read the next chunk from the file
-                numread = fread(bufToSend, 1, MAXDATASIZE, fdr);
-            }
-        }
-        fclose(fdr);
-        printf("Sent %s to client\n", filename);
-        close(new_fd);
+    //while(1) {  // main accept() loop
+    printf("server: waiting for connections...\n");
+    sin_size = sizeof their_addr;
+    new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
+    if (new_fd == -1) {
+        perror("accept");
+        continue;
     }
+
+    inet_ntop(their_addr.ss_family,
+        get_in_addr((struct sockaddr *)&their_addr),
+        s, sizeof s);
+    printf("server: got connection from %s\n", s);
+
+    //create a buffer to store the filename and receive it from the client
+    char bufToRecv[MAXDATASIZE];
+    memset(bufToRecv, 0, sizeof(bufToRecv));
+    recv(new_fd, bufToRecv, MAXDATASIZE, 0);
+    if(numBytes < 0) {
+        perror("Error receiving bufToRecv\n");
+        continue;
+    }
+    printf("Received request to transfer: %s\n", bufToRecv);
+
+
+    close(new_fd);
+    //}
 
     return 0;
 }
