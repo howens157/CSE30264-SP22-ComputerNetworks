@@ -22,8 +22,6 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
-#include <glib-object.h>
-#include <json-glib/json-glib.h>
 
 
 #define BACKLOG 10   // how many pending connections queue will hold
