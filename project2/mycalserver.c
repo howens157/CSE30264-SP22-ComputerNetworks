@@ -22,7 +22,8 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
-
+#include <json-glib/json-glib.h>
+#include <json-glib/json-gobject.h>
 
 #define BACKLOG 10   // how many pending connections queue will hold
 #define MAXDATASIZE 1024
@@ -135,7 +136,7 @@ int main(int argc, char *argv[])
     new_fd = accept(sockfd, (struct sockaddr *)&their_addr, &sin_size);
     if (new_fd == -1) {
         perror("accept");
-        continue;
+        //continue;
     }
 
     inet_ntop(their_addr.ss_family,
@@ -149,7 +150,7 @@ int main(int argc, char *argv[])
     recv(new_fd, bufToRecv, MAXDATASIZE, 0);
     if(numBytes < 0) {
         perror("Error receiving bufToRecv\n");
-        continue;
+        //continue;
     }
     printf("Received request to transfer: %s\n", bufToRecv);
 

@@ -1,18 +1,12 @@
 CC = gcc
 CFLAGS = -g -Wall -std=gnu99
+LDFLAGS = `pkg-config --cflags --libs json-glib-1.0`
 
 all: mycalserver
 
-%.o: %.c
-	$(CC) $(CFLAGS) -c -o $@ $<
-
-mycal: client.o
-	$(CC) $(CFLAGS) -o $@ $<
-
-mycalserver: server.o
-	$(CC) $(CFLAGS) -o $@ $<
+mycalserver:
+	$(CC) $(CFLAGS) mycalserver.c -o mycalserver $(LDFLAGS)
 
 clean:
 	rm -f mycalserver
-	rm -f server.o
 
