@@ -1,3 +1,38 @@
-[	{"date": "0316322", "time": "0200", "duration": 30, "name": "test", "identifier": 0},
-	{"date": "0316323", "time": "0415", "duration": 10, "name": "test2", "identifier": 1}
+[	
+	{
+		"action": "add", 
+		"arguments": {
+			"date": "022322", 
+			"time": "1100", 
+			"duration": "60", 
+			"name": "Quiz", 
+			"description": "", 
+			"location": ""
+		}
+	},
+	{
+		"action": "add", 
+		"arguments": {
+			"date": "022422", 
+			"time": "0900", 
+			"duration": "30", 
+			"name": "Lunch Appointment", 
+			"description": "Having lunch with professor", 
+			"location": "South Dining Hall"
+		}
+	},
+	{
+		"action": "get", 
+		"arguments": {
+			"date": "022322"
+		}
+	},
+	{
+		"action": "getrange", 
+		"arguments": {
+			"start": "020122", 
+			"end": "022822"
+		}
+	}
 ]
+
