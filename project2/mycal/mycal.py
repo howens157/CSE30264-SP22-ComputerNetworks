@@ -3,6 +3,7 @@
 import socket
 import json
 import sys
+import struct
 
 class Fields:
 	def __init__(self):
@@ -23,7 +24,7 @@ class Fields:
 			elif argv[arg_num] == "time":
 				self.time = argv[arg_num+1]
 			elif argv[arg_num] == "duration":
-				self.duration = int(argv[arg_num+1])
+				self.duration = argv[arg_num+1]
 			elif argv[arg_num] == "name":
 				self.name = argv[arg_num+1]
 			elif argv[arg_num] == "description":
@@ -31,15 +32,27 @@ class Fields:
 			elif argv[arg_num] == "location":
 				self.location = argv[arg_num+1]
 			arg_num+=2
-		self.identifier+=1;
+		self.identifier+=1
 
 def main():
-	f = open('server_info.json')
+
+	if len(sys.argv) < 4 or sys.argv[1] == '-h':
+		print('Usage: ./mycal CalendarName Command Args')
+		print('\t./mycal CalendarName add field value ... field value ... field value')
+		print('\t./mycal CalendarName remove identifier')
+		print('\t./mycal CalendarName update identifier field value')
+		print('\t./mycal CalendarName get date')
+		print('\t./mycal CalendarName getrange startDate stopDate')
+		print('\t./mycal CalendarName input filename')
+		exit(1)
+
+
+	f = open('mycal/.mycal')
 
 	info = json.load(f)
 
-	HOST = info[0]['servername']
-	PORT = info[0]['port']
+	HOST = info['servername']
+	PORT = info['port']
 
 	f.close()
 
@@ -88,7 +101,10 @@ def main():
 	
 	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 		s.connect((HOST, PORT))
-		s.sendall(bytes(str(json_to_send), encoding ="utf-8"))	
+		cmdMsg = str(json_to_send)
+		cmdLen = len(cmdMsg)
+		s.sendall(struct.pack('!H', cmdLen))
+		s.sendall(bytes(str(cmdMsg), encoding ="utf-8"))	
 		#for d in data:
 		#	data_to_send = {"calendarName": "testCalendarName", "action": "add", "arguments": d}
 		#	s.sendall(bytes(str(data_to_send), encoding="utf-8"))
