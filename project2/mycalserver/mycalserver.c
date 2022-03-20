@@ -253,6 +253,78 @@ int main(int argc, char *argv[])
                 json_reader_end_member(cmdReader);
 
                 printf("calendarName: %s, action: %s, date: %s, time: %s, duration: %s, name: %s, description: %s, location: %s\n", calName, action, date, time, dur, name, desc, loc);
+                // create new json builder to output to file
+                g_autoptr(JsonBuilder) builder = json_builder_new();
+                json_builder_begin_object(builder);
+                // add validity field
+                json_builder_set_member_name(builder, "valid");
+                json_builder_add_int_value(builder, 1);
+
+                // check if calendar exists
+                char filepath[50];
+                strcpy(filepath, "mycalserver/data/");
+                strcat(filepath, calName);
+                if(!(fopen(filepath, "r"))){ // file does not exist, therefore use id 1 since no entries exist
+                    json_builder_set_member_name(builder, "id");
+                    json_builder_add_int_value(builder, 1);
+                }else{ // get most recent entry and increment id
+                    FILE *fp_cal;
+                    char buff[1024];
+                    int id;
+                    if((fp_cal = fopen(filepath, "r")) != NULL){
+                        fseek(fp_cal, 0, SEEK_SET);
+                        while(!feof(fp_cal)){
+                            memset(buff, 0x00, 1024);
+                            fscanf(fp_cal, "%[^\n]\n", buff);
+                        }
+                        printf("%s\n", buff);
+                        g_autoptr(JsonParser) parser = json_parser_new();
+                        g_autoptr(GError) error = NULL;
+                        json_parser_load_from_data(parser, buff, -1, NULL);
+                        if(error != NULL)
+                        {
+                            g_critical("Unable to parse: %s", error->message);
+                            exit(1);
+                        }
+                        g_autoptr(JsonNode) root = json_parser_get_root(parser);
+                        g_autoptr(JsonReader) reader = json_reader_new(root);
+                        json_reader_read_member(reader, "id");
+                        id = json_reader_get_int_value(reader) + 1;
+                    }
+                    json_builder_set_member_name(builder, "id");
+                    json_builder_add_int_value(builder, id);
+                }
+
+                // fill in remaining info
+                json_builder_set_member_name(builder, "date");
+                json_builder_add_string_value(builder, date);
+                json_builder_set_member_name(builder, "time");
+                json_builder_add_string_value(builder, time);
+                json_builder_set_member_name(builder, "duration");
+                json_builder_add_string_value(builder, dur);
+                json_builder_set_member_name(builder, "name");
+                json_builder_add_string_value(builder, name);
+                json_builder_set_member_name(builder, "description");
+                json_builder_add_string_value(builder, desc);
+                json_builder_set_member_name(builder, "location");
+                json_builder_add_string_value(builder, loc);
+                
+                json_builder_end_object(builder);
+
+                // generate output string
+                g_autoptr(JsonNode) root = json_builder_get_root(builder);
+                g_autoptr(JsonGenerator) g = json_generator_new();
+                json_generator_set_root(g, root);
+                char *data = json_generator_to_data(g, false);
+
+                // write to file
+                FILE *out = fopen(filepath, "a");
+                if(out != NULL){
+                    fputs(data, out);
+                    fputs("\n", out);
+                    fclose(out);
+                }
+                
             }
             else if(strcmp(action, "remove") == 0)
             {
@@ -262,6 +334,57 @@ int main(int argc, char *argv[])
                 json_reader_end_member(cmdReader);
 
                 printf("calendarName: %s, action: %s, identifier: %s\n", calName, action, ident);
+            
+                // read file line by line
+                char filepath[50];
+                strcpy(filepath, "mycalserver/data/");
+                strcat(filepath, calName);
+                char *line = NULL;
+                size_t len = 0;
+                ssize_t read;
+                FILE *fp = fopen(filepath, "r");
+                if(fp == NULL){
+                    printf("This calendar does not exist");
+                    exit(EXIT_FAILURE);
+                }
+                // read until we find json with specified id
+                int target_id = atoi(ident);
+                int id;
+                int del_line = 1;
+                while((read = getline(&line, &len, fp)) != -1){
+                    g_autoptr(JsonParser) parser = json_parser_new();
+                    g_autoptr(GError) error = NULL;
+                    json_parser_load_from_data(parser, line, -1, NULL);
+                    if(error != NULL){
+                        g_critical("Unable to parse: %s", error->message);
+                        exit(1);
+                    }
+                    g_autoptr(JsonNode) root = json_parser_get_root(parser);
+                    g_autoptr(JsonReader) reader = json_reader_new(root);
+                    json_reader_read_member(reader, "id");
+                    id = json_reader_get_int_value(reader);
+                    if(id == target_id){ 
+                        break;
+                    }
+                    del_line++;
+                }
+                printf("Entry was found on line %d\n", del_line);
+
+                // now delete everything from file except for that specific line, put in temp file
+                fp = fopen(filepath, "r");
+                FILE *temp = fopen("mycalserver/data/temp", "w");
+                int curr_line = 1;
+                while((read = getline(&line, &len, fp)) != -1){
+                    if(curr_line != del_line){
+                        fputs(line, temp);
+                    }
+                    curr_line++;
+                }
+                fclose(fp);
+                fclose(temp);
+
+                // copy temp file to main data file
+                
             }
             else if(strcmp(action, "update") == 0)
             {
