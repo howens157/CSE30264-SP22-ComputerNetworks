@@ -60,6 +60,7 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+// rearranges date for easy comparison; input: MMDDYY output: YYMMDD
 char* rearrange_date(const char* date, char result[]) {
 	result[0] = date[4];
 	result[1] = date[5];
@@ -71,17 +72,21 @@ char* rearrange_date(const char* date, char result[]) {
 	return result;
 }
 
+
+// returns if the date is in the given range
 int compare_dates(const char* start_date, const char* end_date, const char* date) {
+	// rearrange dates
 	char rearranged_start_date[6];
 	char rearranged_end_date[6];
 	char rearranged_date[6];
 	rearrange_date(start_date, rearranged_start_date);
 	rearrange_date(end_date, rearranged_end_date);
 	rearrange_date(date, rearranged_date);
-	printf("%s\n%s\n%s\n", rearranged_start_date, rearranged_end_date, rearranged_date);
+	// convert to int
 	int int_start_date = atoi(rearranged_start_date);
 	int int_end_date = atoi(rearranged_end_date);
 	int int_date = atoi(rearranged_date);
+	// returns true or false based on if date is in range
 	return (int_date >= int_start_date && int_date <= int_end_date);
 }
 
