@@ -5,7 +5,7 @@ import json
 import sys
 import struct
 
-def handleCommand(cmdJSON):
+def handleCommand(cmdJSON, HOST, PORT):
 	cmdStr = json.dumps(cmdJSON)
 	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
 		s.connect((HOST, PORT))
@@ -125,7 +125,7 @@ def main():
 		exit(1)
 
 	if inputFilename is False:
-		handleCommand(cmdJSON)
+		handleCommand(cmdJSON, HOST, PORT)
 	else:
 		f = open(inputFilename)
 		commands = json.load(f)
@@ -133,7 +133,7 @@ def main():
 		for command in commands:
 			currCmd = command
 			currCmd['calendarName'] = calendar_name
-			handleCommand(currCmd)
+			handleCommand(currCmd, HOST, PORT)
 
 if __name__ == '__main__':
 	main()
