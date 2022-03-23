@@ -384,7 +384,13 @@ int main(int argc, char *argv[])
                 fclose(temp);
 
                 // copy temp file to main data file
-                
+                temp = fopen("mycalserver/data/temp", "r");
+                FILE *out = fopen(filepath, "w");
+                char ch;
+                while((ch = fgetc(temp)) != EOF) fputc(ch, out);
+                fclose(temp);
+                fclose(out);
+                remove("mycalserver/data/temp");
             }
             else if(strcmp(action, "update") == 0)
             {
