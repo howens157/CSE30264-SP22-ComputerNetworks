@@ -4,6 +4,7 @@ import socket
 import json
 import sys
 import struct
+from datetime import datetime
 
 def handleCommand(cmdJSON, HOST, PORT):
 	cmdStr = json.dumps(cmdJSON)
@@ -13,30 +14,62 @@ def handleCommand(cmdJSON, HOST, PORT):
 		s.sendall(struct.pack('!H', cmdLen))
 		s.sendall(bytes(cmdStr, encoding ="utf-8"))
 		retLen = s.recv(2)
-		retLen = struct.unpack('!H', retLen)
+		retLen = struct.unpack('!H', retLen)[0]
 		print(f'Received message length of {retLen} from server')
-		retJSONstr = s.recv(retLen).decode("utf-8")
-		print(retJSONstr)
+		retJSONstr = s.recv(retLen)
+		retJSONstr = retJSONstr.decode()
+		# retJSONstr = ""
+		# lenReceived = 0
+		# while lenReceived < retLen:
+		# 	currStr = s.recv(retLen)
+		# 	lenReceived += len(str(currStr))
+		# 	retJSONstr += str(currStr)
 		retJSON = json.loads(retJSONstr)
-		if retJSON.success == "True":
-			print(f'Succesfully executed {retJSON.command} on {retJSON.calendar}')
-			if retJSON.command == "add":
-				print(f'Added event with identifier: {retJSON.identifier}')
-			elif retJSON.command == "remove":
-				print(f'Removed event with identifier: {retJSON.identifier}')
-			elif retJSON.command == "update":
-				print(f'Updated event with identifier: {retJSON.identifier}')
-			elif retJSON.command == "get":	
+		print(retJSON)
+		if retJSON["success"] == True:
+			print(f'Succesfully executed {retJSON["command"]} on {retJSON["calendar"]}')
+			if retJSON["command"] == "add":
+				print(f'Added event with identifier: {retJSON["identifier"]}')
+			elif retJSON["command"] == "remove":
+				print(f'Removed event with identifier: {retJSON["identifier"]}')
+			elif retJSON["command"] == "update":
+				print(f'Updated event with identifier: {retJSON["identifier"]}')
+			elif retJSON["command"] == "get":
 				print("All events on given day:")
-				print(retJSON.data)
-			elif retJSON.command == "getrange":
-				print("All events within given range:")
-				print(retJSON.data)
+				for event in retJSON["data"]:
+					event = json.loads(event)
+					print(f'Event ID: {event["id"]}     Date: {event["date"]}     Time: {event["time"]}     Duration(minutes): {event["duration"]}     Name: {event["name"]}', end="")
+					if event["description"] != "":
+						print(f'     Description: {event["description"]}', end="")
+					if event["location"] != "":
+						print(f'     Location: {event["location"]}', end="")
+					print("")
+			elif retJSON["command"] == "getrange":
+				output_d = {}
+				for event in retJSON["data"]:
+					eventJSON = json.loads(event)
+					date = datetime.strptime(eventJSON["date"], '%m%d%y')
+					if date not in output_d:
+						output_d[date] = [eventJSON]
+					else:
+						output_d[date].append(eventJSON)
+				print(output_d)
+				for key in sorted(output_d.keys()):
+					print("Date: " + key.strftime("%B %d, %Y"))
+					for event in output_d[key]:
+						print(f'Event ID: {event["id"]}     Time: {event["time"]}     Duration(minutes): {event["duration"]}     Name: {event["name"]}', end="")
+						if event["description"] != "":
+							print(f'     Description: {eventJSON["description"]}', end="")
+						if event["location"] != "":
+							print(f'     Location: {eventJSON["location"]}', end="")
+						print("")
+					print("\n")
+
 			else:
-				print(f'Received unknown command from server: {retJSON.command}')
-		elif retJSON.success == "False":
-			print(f'Failed to execute {retJSON.command} on {retJSON.calendar}')
-			print(f'Error: {retJSON.error}')
+				print(f'Received unknown command from server: {retJSON["command"]}')
+		elif retJSON["success"] == False:
+			print(f'Failed to execute {retJSON["command"]} on {retJSON["calendar"]}')
+			print(f'Error: {retJSON["error"]}')
 		else:
 			print("Error receiving command.")
 			print("Received:")
