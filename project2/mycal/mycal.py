@@ -4,39 +4,84 @@ import socket
 import json
 import sys
 import struct
+from datetime import datetime
 
-class Fields:
-	def __init__(self):
-		self.date = ""
-		self.time = ""
-		self.duration = 0
-		self.name = ""
-		self.description = ""
-		self.location = ""
-		self.identifier = 0
-		self.description = ""
+def handleCommand(cmdJSON, HOST, PORT):
+	cmdStr = json.dumps(cmdJSON)
+	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+		s.connect((HOST, PORT))
+		cmdLen = len(cmdStr)
+		s.sendall(struct.pack('!H', cmdLen))
+		s.sendall(bytes(cmdStr, encoding ="utf-8"))
+		retLen = s.recv(2)
+		retLen = struct.unpack('!H', retLen)[0]
+		print(f'Received message length of {retLen} from server')
+		retJSONstr = s.recv(retLen)
+		retJSONstr = retJSONstr.decode()
+		# retJSONstr = ""
+		# lenReceived = 0
+		# while lenReceived < retLen:
+		# 	currStr = s.recv(retLen)
+		# 	lenReceived += len(str(currStr))
+		# 	retJSONstr += str(currStr)
+		retJSON = json.loads(retJSONstr)
+		print(retJSON)
+		if retJSON["success"] == True:
+			print(f'Succesfully executed {retJSON["command"]} on {retJSON["calendar"]}')
+			if retJSON["command"] == "add":
+				print(f'Added event with identifier: {retJSON["identifier"]}')
+			elif retJSON["command"] == "remove":
+				print(f'Removed event with identifier: {retJSON["identifier"]}')
+			elif retJSON["command"] == "update":
+				print(f'Updated event with identifier: {retJSON["identifier"]}')
+			elif retJSON["command"] == "get":
+				print("All events on given day:")
+				for event in retJSON["data"]:
+					event = json.loads(event)
+					print(f'Event ID: {event["id"]}     Date: {event["date"]}     Time: {event["time"]}     Duration(minutes): {event["duration"]}     Name: {event["name"]}', end="")
+					if event["description"] != "":
+						print(f'     Description: {event["description"]}', end="")
+					if event["location"] != "":
+						print(f'     Location: {event["location"]}', end="")
+					print("")
+			elif retJSON["command"] == "getrange":
+				output_d = {}
+				for event in retJSON["data"]:
+					eventJSON = json.loads(event)
+					date = datetime.strptime(eventJSON["date"], '%m%d%y')
+					if date not in output_d:
+						output_d[date] = [eventJSON]
+					else:
+						output_d[date].append(eventJSON)
+				print(output_d)
+				for key in sorted(output_d.keys()):
+					print("Date: " + key.strftime("%B %d, %Y"))
+					for event in output_d[key]:
+						print(f'Event ID: {event["id"]}     Time: {event["time"]}     Duration(minutes): {event["duration"]}     Name: {event["name"]}', end="")
+						if event["description"] != "":
+							print(f'     Description: {eventJSON["description"]}', end="")
+						if event["location"] != "":
+							print(f'     Location: {eventJSON["location"]}', end="")
+						print("")
+					print("\n")
 
-	def update_fields(self, argv, argc, start):
-		arg_num = start
-		while (arg_num < argc):
-			if argv[arg_num] == "date":
-				self.date = argv[arg_num+1]
-			elif argv[arg_num] == "time":
-				self.time = argv[arg_num+1]
-			elif argv[arg_num] == "duration":
-				self.duration = argv[arg_num+1]
-			elif argv[arg_num] == "name":
-				self.name = argv[arg_num+1]
-			elif argv[arg_num] == "description":
-				self.description = argv[arg_num+1]
-			elif argv[arg_num] == "location":
-				self.location = argv[arg_num+1]
-			arg_num+=2
-		self.identifier+=1
+			else:
+				print(f'Received unknown command from server: {retJSON["command"]}')
+		elif retJSON["success"] == False:
+			print(f'Failed to execute {retJSON["command"]} on {retJSON["calendar"]}')
+			print(f'Error: {retJSON["error"]}')
+		else:
+			print("Error receiving command.")
+			print("Received:")
+			print(retJSONstr)
+
+
 
 def main():
+	argc = len(sys.argv)
+	argv = sys.argv
 
-	if len(sys.argv) < 4 or sys.argv[1] == '-h':
+	if argc < 4 or argv[1] == '-h':
 		print('Usage: ./mycal CalendarName Command Args')
 		print('\t./mycal CalendarName add field value ... field value ... field value')
 		print('\t./mycal CalendarName remove identifier')
@@ -46,70 +91,82 @@ def main():
 		print('\t./mycal CalendarName input filename')
 		exit(1)
 
+	validFields = ['date', 'time', 'duration', 'name', 'description', 'location']
+	reqFields = ['date', 'time', 'duration', 'name']
+	inputFilename = False
 
 	f = open('mycal/.mycal')
-
 	info = json.load(f)
-
 	HOST = info['servername']
 	PORT = info['port']
-
 	f.close()
 
-	print(HOST, PORT)
-
-	# read command line arguments
-	argc = len(sys.argv)
-	argv = sys.argv
-
-	fields = Fields()
-
+	cmdJSON = {}
 	calendar_name = argv[1]
+	cmdJSON["calendarName"] = calendar_name
+	action = argv[2]
+	cmdJSON["action"] = action
+	cmdJSON["arguments"] = {}
 
-	start_date = ""
-	end_date = ""
+	if action == 'add':
+		for field in validFields:
+			cmdJSON['arguments'][field] = ""
+		providedFields = []
+		for i in range(3, len(argv), 2):
+			if argv[i] not in validFields:
+				print(f'Invalid Field: {argv[i]}')
+				print('Please only include these fields:')
+				print(validFields)
+				exit(1)
+			else:
+				providedFields.append(argv[i])
+				cmdJSON['arguments'][argv[i]] = argv[i+1]
+		for field in reqFields:
+			if field not in providedFields:
+				print('Not all required fields provided')
+				print('Please provide these fields:')
+				print(reqFields)
+				exit(1)
+	elif action == 'remove':
+		cmdJSON['arguments']['identifier'] = argv[3]
+	elif action == 'update':
+		cmdJSON['arguments']['identifier'] = argv[3]
+		if argv[4] not in validFields:
+			print(f'Invalid Field: {argv[4]}')
+			print('Please only include these fields:')
+			print(validFields)
+			exit(1)
+		else:
+			cmdJSON['arguments']['field'] = argv[4]
+			cmdJSON['arguments']['value'] = argv[5]
+	elif action == 'get':
+		cmdJSON['arguments']['date'] = argv[3]
+	elif action == 'getrange':
+		cmdJSON['arguments']['start'] = argv[3]
+		cmdJSON['arguments']['end'] = argv[4]
+	elif action == 'input':
+		inputFilename = argv[3]
+	else:
+		print('Unknown command')
+		print('Usage: ./mycal CalendarName Command Args')
+		print('\t./mycal CalendarName add field value ... field value ... field value')
+		print('\t./mycal CalendarName remove identifier')
+		print('\t./mycal CalendarName update identifier field value')
+		print('\t./mycal CalendarName get date')
+		print('\t./mycal CalendarName getrange startDate stopDate')
+		print('\t./mycal CalendarName input filename')
+		exit(1)
 
-	if argv[2] == "add":
-		print("add")
-		fields.update_fields(argv, argc, 3)
-	elif argv[2] == "remove":
-		print("remove")
-		fields.identifier = int(argv[3])
-	elif argv[2] == "update":
-		fields.identifier = int(argv[3])
-		fields.update_fields(argv, argc, 4)
-	elif argv[2] == "get":
-		print("get")
-		fields.date = argv[3]
-	elif argv[2] == "getrange":
-		print("getrange")
-		start_date = argv[3]
-		end_date = argv[4]
-		print("start:", start_date, "end:", end_date)
-	elif argv[2] == "input":
-		file_name = argv[3]
-		print("input: file name:", file_name)
-
-	print(fields.date)
-	json_to_send = {"calendarName": calendar_name, "action": "add", "arguments": {"date": fields.date, "time": fields.time, "duration": fields.duration, "name": fields.name, "identifier": fields.identifier, "description": fields.description, "location": fields.location}} 
-	print(json_to_send)
-
-	# read json from file
-	f = open('data.json')
-	data = json.load(f)
-
-	
-	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-		s.connect((HOST, PORT))
-		cmdMsg = str(json_to_send)
-		cmdLen = len(cmdMsg)
-		s.sendall(struct.pack('!H', cmdLen))
-		s.sendall(bytes(str(cmdMsg), encoding ="utf-8"))	
-		#for d in data:
-		#	data_to_send = {"calendarName": "testCalendarName", "action": "add", "arguments": d}
-		#	s.sendall(bytes(str(data_to_send), encoding="utf-8"))
-		#	print("sent data")
-
+	if inputFilename is False:
+		handleCommand(cmdJSON, HOST, PORT)
+	else:
+		f = open(inputFilename)
+		commands = json.load(f)
+		f.close()
+		for command in commands:
+			currCmd = command
+			currCmd['calendarName'] = calendar_name
+			handleCommand(currCmd, HOST, PORT)
 
 if __name__ == '__main__':
 	main()
