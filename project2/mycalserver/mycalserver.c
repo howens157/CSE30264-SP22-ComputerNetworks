@@ -256,9 +256,6 @@ int main(int argc, char *argv[])
                 // create new json builder to output to file
                 g_autoptr(JsonBuilder) builder = json_builder_new();
                 json_builder_begin_object(builder);
-                // add validity field
-                json_builder_set_member_name(builder, "valid");
-                json_builder_add_int_value(builder, 1);
 
                 // check if calendar exists
                 char filepath[50];
@@ -347,6 +344,7 @@ int main(int argc, char *argv[])
                     printf("This calendar does not exist");
                     exit(EXIT_FAILURE);
                 }
+
                 // read until we find json with specified id
                 int target_id = atoi(ident);
                 int id;
@@ -406,6 +404,137 @@ int main(int argc, char *argv[])
                 json_reader_end_member(cmdReader);
 
                 printf("calendarName: %s, action: %s, identifier: %s, field: %s, value: %s\n", calName, action, ident, field, value);
+
+                // read file line by line
+                char filepath[50];
+                strcpy(filepath, "mycalserver/data/");
+                strcat(filepath, calName);
+                char *line = NULL;
+                size_t len = 0;
+                ssize_t read;
+                FILE *fp = fopen(filepath, "r");
+                if(fp == NULL){
+                    printf("This calendar does not exist");
+                    exit(EXIT_FAILURE);
+                }
+
+                // read until we find json with specified id
+                int target_id = atoi(ident);
+                int id;
+                
+                // open temp to store new file
+                FILE *temp = fopen("mycalserver/data/temp", "w");
+
+                // open temp file to copy lines into
+                while((read = getline(&line, &len, fp)) != -1){
+                    g_autoptr(JsonParser) parser = json_parser_new();
+                    g_autoptr(GError) error = NULL;
+                    json_parser_load_from_data(parser, line, -1, NULL);
+                    if(error != NULL){
+                        g_critical("Unable to parse: %s", error->message);
+                        exit(1);
+                    }
+                    g_autoptr(JsonNode) root = json_parser_get_root(parser);
+                    g_autoptr(JsonReader) reader = json_reader_new(root);
+                    json_reader_read_member(reader, "id");
+                    id = json_reader_get_int_value(reader);
+                    json_reader_end_member(reader);
+                    if(id == target_id){ // change this line
+                        // create new json builder to output to file
+                        g_autoptr(JsonBuilder) builder = json_builder_new();
+                        json_builder_begin_object(builder);
+
+                        // build new json
+                        if(strcmp(field, "id") == 0){
+                            printf("id cannot be updated\n");
+                        }
+                        json_builder_set_member_name(builder, "id");
+                        json_builder_add_int_value(builder, id);
+
+                        if(strcmp(field, "date") == 0){
+                            json_builder_set_member_name(builder, "date");
+                            json_builder_add_string_value(builder, value);
+                        }else{
+                            json_reader_read_member(reader, "date");
+                            json_builder_set_member_name(builder, "date");
+                            json_builder_add_string_value(builder, json_reader_get_string_value(reader));
+                            json_reader_end_member(reader);
+                        }
+
+                        if(strcmp(field, "time") == 0){
+                            json_builder_set_member_name(builder, "time");
+                            json_builder_add_string_value(builder, value);
+                        }else{
+                            json_reader_read_member(reader, "time");
+                            json_builder_set_member_name(builder, "time");
+                            json_builder_add_string_value(builder, json_reader_get_string_value(reader));
+                            json_reader_end_member(reader);
+                        }
+
+                        if(strcmp(field, "duration") == 0){
+                            json_builder_set_member_name(builder, "duration");
+                            json_builder_add_string_value(builder, value);
+                        }else{
+                            json_reader_read_member(reader, "duration");
+                            json_builder_set_member_name(builder, "duration");
+                            json_builder_add_string_value(builder, json_reader_get_string_value(reader));
+                            json_reader_end_member(reader);
+                        }
+
+                        if(strcmp(field, "name") == 0){
+                            json_builder_set_member_name(builder, "name");
+                            json_builder_add_string_value(builder, value);
+                        }else{
+                            json_reader_read_member(reader, "name");
+                            json_builder_set_member_name(builder, "name");
+                            json_builder_add_string_value(builder, json_reader_get_string_value(reader));
+                            json_reader_end_member(reader);
+                        }
+
+                        if(strcmp(field, "description") == 0){
+                            json_builder_set_member_name(builder, "description");
+                            json_builder_add_string_value(builder, value);
+                        }else{
+                            json_reader_read_member(reader, "description");
+                            json_builder_set_member_name(builder, "description");
+                            json_builder_add_string_value(builder, json_reader_get_string_value(reader));
+                            json_reader_end_member(reader);
+                        }
+
+                        if(strcmp(field, "location") == 0){
+                            json_builder_set_member_name(builder, "location");
+                            json_builder_add_string_value(builder, value);
+                        }else{
+                            json_reader_read_member(reader, "location");
+                            json_builder_set_member_name(builder, "location");
+                            json_builder_add_string_value(builder, json_reader_get_string_value(reader));
+                            json_reader_end_member(reader);
+                        }
+                        json_builder_end_object(builder);
+
+                        // generate output string
+                        g_autoptr(JsonNode) root = json_builder_get_root(builder);
+                        g_autoptr(JsonGenerator) g = json_generator_new();
+                        json_generator_set_root(g, root);
+                        char *data = json_generator_to_data(g, false);
+                        printf("%s\n", data);
+                        fputs(data, temp);
+                        fputc('\n', temp);
+                    }else{ // print same line to temp if not the id we want to change
+                        printf("%s\n", line);
+                        fputs(line, temp);
+                    }
+                }
+                fclose(temp);
+
+                // copy temp file to main data file
+                temp = fopen("mycalserver/data/temp", "r");
+                FILE *out = fopen(filepath, "w");
+                char ch;
+                while((ch = fgetc(temp)) != EOF) fputc(ch, out);
+                fclose(temp);
+                fclose(out);
+                remove("mycalserver/data/temp");
             }
             else if(strcmp(action, "get") == 0)
             {
