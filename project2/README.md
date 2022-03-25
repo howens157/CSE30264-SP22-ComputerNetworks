@@ -23,8 +23,8 @@ The client can also be invoked to read a list of commands from a JSON file and s
 be formatted as a true JSON object that is an array of objects, with each object being a command to be sent to the server.
 The command objects are formatted like so:
 
-{
-		"action": "add", 
+{\n
+		"action": "add",\n 
 		"arguments": {
 			"date": "022322", 
 			"time": "1100", 
