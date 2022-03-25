@@ -24,15 +24,15 @@ be formatted as a true JSON object that is an array of objects, with each object
 The command objects are formatted like so:
 
 { <br />
-		"action": "add", <br />
-		"arguments": { <br />
-			"date": "022322", <br />
-			"time": "1100", <br />
-			"duration": "60", <br />
-			"name": "Quiz", <br />
-			"description": "", <br />
-			"location": "" <br />
-		} <br />
+                "action": "add", <br />
+                "arguments": { <br />
+                        "date": "022322", <br />
+                        "time": "1100", <br />
+                        "duration": "60", <br />
+                        "name": "Quiz", <br />
+                        "description": "", <br />
+                        "location": "" <br />
+                } <br />
 } <br />
 
 There is an example file of commands in the project2 directory called test-inputs.json
