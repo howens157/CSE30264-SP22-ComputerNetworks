@@ -1,13 +1,15 @@
-/* proj1server.c 
- * 2/1/2022
+/* mycalserver.c 
+ * 3/25/2022
  * Hayden Owens, Lauren Korbel, Riley Griffith
  * CSE30264 - Computer Networks
  *
- * This code implements a simple server that will accept a connection from a client 
- * requesting a file transfer, and transfer that file over a network connection
+ * This code implements a calendar server that manages calendars stored as lists of JSON
+ * data for each event
  *
  * Usage:
- *      ./proj1server PORT
+ *      ./mycalserver
+ *      ./mycalserver -mt
+ *          -use mt flag to allow multiple connections at once
 */
 
 #include <stdio.h>
@@ -227,7 +229,6 @@ int main(int argc, char *argv[])
                 continue;
             }
             commandLength = ntohs(commandLength);
-            printf("Received length of command: %d\n", commandLength);
 
             //create a buffer to store the command and receive it from the client
             char commandBuf[commandLength+1];
@@ -237,7 +238,6 @@ int main(int argc, char *argv[])
                 perror("Error receiving command\n");
                 continue;
             }
-            printf("Received command: %s\n", commandBuf);
 
             //Parse command
             g_autoptr(JsonParser) cmdParser = json_parser_new();
@@ -284,10 +284,7 @@ int main(int argc, char *argv[])
                 json_reader_end_member(cmdReader);
                 json_reader_read_member(cmdReader, "location");
                 const char* loc = json_reader_get_string_value(cmdReader);
-                json_reader_end_member(cmdReader);
-
-                printf("calendarName: %s, action: %s, date: %s, time: %s, duration: %s, name: %s, description: %s, location: %s\n", calName, action, date, time, dur, name, desc, loc);
-                
+                json_reader_end_member(cmdReader);                
                 
                 // create new json builder to output to file
                 g_autoptr(JsonBuilder) builder = json_builder_new();
@@ -299,6 +296,7 @@ int main(int argc, char *argv[])
                 strcpy(filepath, "mycalserver/data/");
                 strcat(filepath, calName);
                 if(!(fopen(filepath, "r"))){ // file does not exist, therefore use id 1 since no entries exist
+                    id = 1;
                     json_builder_set_member_name(builder, "id");
                     json_builder_add_int_value(builder, 1);
                 }else{ // get most recent entry and increment id
@@ -377,8 +375,6 @@ int main(int argc, char *argv[])
                 json_reader_read_member(cmdReader, "identifier");
                 const char* ident = json_reader_get_string_value(cmdReader);
                 json_reader_end_member(cmdReader);
-
-                printf("calendarName: %s, action: %s, identifier: %s\n", calName, action, ident);
             
                 // add fields to response JSON
                 json_builder_set_member_name(resp_builder, "command");
@@ -484,8 +480,6 @@ int main(int argc, char *argv[])
                 json_reader_read_member(cmdReader, "value");
                 const char* value = json_reader_get_string_value(cmdReader);
                 json_reader_end_member(cmdReader);
-
-                printf("calendarName: %s, action: %s, identifier: %s, field: %s, value: %s\n", calName, action, ident, field, value);
 
                 // add fields to response JSON
                 json_builder_set_member_name(resp_builder, "command");
@@ -670,8 +664,6 @@ int main(int argc, char *argv[])
                 const char* target_date = json_reader_get_string_value(cmdReader);
                 json_reader_end_member(cmdReader);
 
-                printf("calendarName: %s, action: %s, date: %s\n", calName, action, target_date);
-
                 json_builder_set_member_name(resp_builder, "command");
                 json_builder_add_string_value(resp_builder, action);
                 json_builder_set_member_name(resp_builder, "calendar");
@@ -734,8 +726,6 @@ int main(int argc, char *argv[])
                 const char* end = json_reader_get_string_value(cmdReader);
                 json_reader_end_member(cmdReader);
 
-                printf("calendarName: %s, action: %s, startDate: %s, endDate: %s\n", calName, action, start, end);
-
                 json_builder_set_member_name(resp_builder, "command");
                 json_builder_add_string_value(resp_builder, action);
                 json_builder_set_member_name(resp_builder, "calendar");
@@ -794,7 +784,6 @@ int main(int argc, char *argv[])
             g_autoptr(JsonGenerator) g = json_generator_new();
             json_generator_set_root(g, root);
             const char *data = json_generator_to_data(g, NULL);
-            printf("%s\n", data);
 
             uint16_t len = strlen(data);
             len = htons(len);
