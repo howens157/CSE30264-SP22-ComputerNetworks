@@ -35,7 +35,15 @@
 
 /* Global Variables */
 char g_bKeepLooping = 1;
-pthread_mutex_t g_BigLock;
+bool lobbyFull;
+pthread_mutex_t g_BigLock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
+int numPlayers;
+char* lobPort;
+char* gamePort;
+int numRounds;
+char *dictFile;
+bool debug;
 
 
 int sockfd;
@@ -89,7 +97,7 @@ void * Thread_Client (void * pData)
 	
 	/* Copy it over to a local instance */
 	threadClient = *pClient;
-    int i = 1;
+
     if ((numBytes = recv(pClient->socketClient, szBuffer, MAXDATASIZE-1, 0)) == -1) {
         perror("recv");
         exit(1);
@@ -131,27 +139,69 @@ void * Thread_Client (void * pData)
     g_autoptr(JsonBuilder) builder = json_builder_new();
     json_builder_begin_object(builder);
     json_builder_set_member_name(builder, "MessageType");
-    json_builder_add_String_value(builder, "1");
+    json_builder_add_string_value(builder, "JoinResult");
+    json_builder_set_member_name(builder, "Data");
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "Name");
+    json_builder_add_string_value(builder, name);
+    json_builder_set_member_name(builder, "Result");
+    json_builder_add_string_value(builder, "Yes");
+    json_builder_end_object(builder);
+    json_builder_end_object(builder);
+
+    g_autoptr(JsonNode) root = json_builder_get_root(builder);
+    g_autoptr(JsonGenerator) g = json_generator_new();
+    json_generator_set_root(g, root);
+    const char *joinResp = json_generator_to_data(g, NULL);
+
+    printf("%s\n", joinResp);
+
+    uint16_t len = strlen(joinResp);
+    len = htons(len);
+    send(pClient->socketClient, joinResp, len, 0);
     // This is a pretty good time to lock a mutex
     pthread_mutex_lock(&g_BigLock);
-    
+    while(!lobbyFull){
+        pthread_cond_wait(&cond, &g_BigLock);
+    }
     // Do something dangerous here that impacts shared information
     
-    // Echo back the same message
-    if (send(pClient->socketClient, szBuffer, numBytes, 0) == -1)
-    {
-        perror("send");		
-    }
             
     // This is a pretty good time to unlock a mutex
     pthread_mutex_unlock(&g_BigLock);
-    i = 0;
 	
+    builder = json_builder_new();
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "MessageType");
+    json_builder_add_string_value(builder, "StartInstance");
+    json_builder_set_member_name(builder, "Data");
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "Server");
+    json_builder_add_string_value(builder, "localhost");
+    json_builder_set_member_name(builder, "Port");
+    json_builder_add_string_value(builder, gamePort);
+    json_builder_set_member_name(builder, "Nonce");
+    json_builder_add_string_value(builder, "TEMP");
+    json_builder_end_object(builder);
+    json_builder_end_object(builder);
+
+    root = json_builder_get_root(builder);
+    g = json_generator_new();
+    json_generator_set_root(g, root);
+    const char *startMsg = json_generator_to_data(g, NULL);
+
+    printf("%s\n", startMsg);
+
+    len = strlen(startMsg);
+    len = htons(len);
+    send(pClient->socketClient, startMsg, len, 0);
+
 	return NULL;
 }
 
 void Server_Lobby (char* nLobbyPort, int numClients)
 {
+    lobbyFull = false;
 	// Adapting this from Beej's Guide
 	
     int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
@@ -245,8 +295,12 @@ void Server_Lobby (char* nLobbyPort, int numClients)
 		// Bail out when the third client connects after sleeping a bit
 		if(nClientCount == numClients)
 		{
+            pthread_mutex_lock(&g_BigLock);
+            lobbyFull = true;
 			g_bKeepLooping = 0;
 			sleep(15);
+            pthread_cond_broadcast(&cond);
+            pthread_mutex_unlock(&g_BigLock);
 		}		
     }
 }
@@ -264,12 +318,12 @@ int main(int argc, char *argv[])
 
     signal(SIGINT, sigint_handler);
 
-    int numPlayers = 1; //change to 2
-    char* lobPort = "41100";
-    char* gamePort = "41101";
-    int numRounds = 3;
-    char *dictFile = "defaultDict.txt";
-    bool debug = false;
+    numPlayers = 1; //change to 2
+    lobPort = "41100";
+    gamePort = "41101";
+    numRounds = 3;
+    dictFile = "defaultDict.txt";
+    debug = false;
 
     if(argc > 12) {
         printf("Improper usage\n");

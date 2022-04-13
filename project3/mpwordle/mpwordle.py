@@ -27,11 +27,17 @@ def handleCommand(cmdJSON, HOST, PORT):
 		# send the length of the command string first then send the command string
 		s.sendall(bytes(cmdStr, encoding ="utf-8"))
 		# receive the length of the return message first 
-		retLen = s.recv(2)
-		retLen = struct.unpack('!H', retLen)[0]
+		# retLen = s.recv(2)
+		# retLen = struct.unpack('!H', retLen)[0]
 		# receive the return message and decode it and load it as json
-		retJSONstr = s.recv(retLen)
-		retJSONstr = retJSONstr.decode()
+		retJSONstr = str(s.recv(1024)).split("\\x00")[0][2:]
+		retJSON = json.loads(retJSONstr)
+
+		print(retJSON)
+
+		f = s.makefile('rb')
+		retJSONstr = f.read(1024) 
+		print(retJSONstr)
 		retJSON = json.loads(retJSONstr)
 
 		print(retJSON)
