@@ -37,6 +37,7 @@
 char g_bKeepLooping = 1;
 pthread_mutex_t g_BigLock;
 
+
 int sockfd;
 int new_fd;
 
@@ -75,18 +76,6 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-// rearranges date for easy comparison; input: MMDDYY output: YYMMDD
-char* rearrange_date(const char* date, char result[]) {
-	result[0] = date[4];
-	result[1] = date[5];
-	result[2] = date[0];
-	result[3] = date[1];
-	result[4] = date[2];
-	result[5] = date[3];
-
-	return result;
-}
-
 void * Thread_Client (void * pData)
 {
 	struct ClientInfo * pClient;
@@ -100,38 +89,63 @@ void * Thread_Client (void * pData)
 	
 	/* Copy it over to a local instance */
 	threadClient = *pClient;
-	
-	while(g_bKeepLooping)
-	{
-		if ((numBytes = recv(pClient->socketClient, szBuffer, MAXDATASIZE-1, 0)) == -1) {
-			perror("recv");
-			exit(1);
-		}
+    int i = 1;
+    if ((numBytes = recv(pClient->socketClient, szBuffer, MAXDATASIZE-1, 0)) == -1) {
+        perror("recv");
+        exit(1);
+    }
 
-		szBuffer[numBytes] = '\0';
+    szBuffer[numBytes] = '\0';
 
-		// Debug / show what we got
-		printf("Received a message of %d bytes from Client %s\n", numBytes, pClient->szIdentifier);
-		printf("   Message: %s\n", szBuffer);
-		
-		// Do something with it
-						
-		
-		
-		// This is a pretty good time to lock a mutex
-		pthread_mutex_lock(&g_BigLock);
-		
-		// Do something dangerous here that impacts shared information
-		
-		// Echo back the same message
-		if (send(pClient->socketClient, szBuffer, numBytes, 0) == -1)
-		{
-			perror("send");		
-		}
-				
-		// This is a pretty good time to unlock a mutex
-		pthread_mutex_unlock(&g_BigLock);
-	}
+    // Debug / show what we got
+    printf("Received a message of %d bytes from Client %s\n", numBytes, pClient->szIdentifier);
+    printf("   Message: %s\n", szBuffer);
+    
+    // Do something with it
+    g_autoptr(JsonParser) cmdParser = json_parser_new();
+    g_autoptr(GError) error = NULL;
+    json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
+    if(error != NULL)
+    {
+        g_critical("Unable to parse command: %s", error->message);
+        exit(1);
+    }
+    g_autoptr(JsonNode) cmdRoot = json_parser_get_root(cmdParser);
+
+    //Read calenderName and action values
+    g_autoptr(JsonReader) cmdReader = json_reader_new(cmdRoot);
+    json_reader_read_member(cmdReader, "MessageType");
+    const char* msgType = json_reader_get_string_value(cmdReader);
+    json_reader_end_member(cmdReader);
+    json_reader_read_member(cmdReader, "Data");
+    json_reader_read_member(cmdReader, "Name");
+    const char* name = json_reader_get_string_value(cmdReader);
+    json_reader_end_member(cmdReader);
+    json_reader_read_member(cmdReader, "Client");
+    const char* client = json_reader_get_string_value(cmdReader);
+    json_reader_end_member(cmdReader);
+    json_reader_end_member(cmdReader);				
+    
+    printf("%s %s %s\n", msgType, name, client);
+
+    g_autoptr(JsonBuilder) builder = json_builder_new();
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "MessageType");
+    json_builder_add_String_value(builder, "1");
+    // This is a pretty good time to lock a mutex
+    pthread_mutex_lock(&g_BigLock);
+    
+    // Do something dangerous here that impacts shared information
+    
+    // Echo back the same message
+    if (send(pClient->socketClient, szBuffer, numBytes, 0) == -1)
+    {
+        perror("send");		
+    }
+            
+    // This is a pretty good time to unlock a mutex
+    pthread_mutex_unlock(&g_BigLock);
+    i = 0;
 	
 	return NULL;
 }
@@ -150,7 +164,7 @@ void Server_Lobby (char* nLobbyPort, int numClients)
     int rv;
 	
 	struct ClientInfo theClientInfo;
-	int nClientCount = numClients;	
+	int nClientCount = 0;	
 
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;
@@ -227,8 +241,9 @@ void Server_Lobby (char* nLobbyPort, int numClients)
 		 *   https://pages.cs.wisc.edu/~remzi/OSTEP/threads-api.pdf */
 		pthread_create(&(theClientInfo.threadClient), NULL, Thread_Client, &theClientInfo);
 		
+        printf("%d of %d clients\n", nClientCount, numClients);
 		// Bail out when the third client connects after sleeping a bit
-		if(nClientCount == 3)
+		if(nClientCount == numClients)
 		{
 			g_bKeepLooping = 0;
 			sleep(15);

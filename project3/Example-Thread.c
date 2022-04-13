@@ -42,6 +42,7 @@ void * Thread_Client (void * pData)
 	/* Copy it over to a local instance */
 	threadClient = *pClient;
 	
+
 	while(g_bKeepLooping)
 	{
 		if ((numBytes = recv(pClient->socketClient, szBuffer, MAXDATASIZE-1, 0)) == -1) {

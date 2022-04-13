@@ -25,8 +25,6 @@ def handleCommand(cmdJSON, HOST, PORT):
 		# connect to server
 		s.connect((HOST, PORT))
 		# send the length of the command string first then send the command string
-		cmdLen = len(cmdStr)
-		s.sendall(struct.pack('!H', cmdLen))
 		s.sendall(bytes(cmdStr, encoding ="utf-8"))
 		# receive the length of the return message first 
 		retLen = s.recv(2)
@@ -96,23 +94,16 @@ def main():
 	if argc < 7 or argv[1] == '-h':
 		error()
 	
-	playerName, serverIP, portNo = None, None, None
+	playerName, HOST, PORT = None, None, None
 	for i in range(1, 7, 2):
 		if argv[i] == "-name":
 			playerName = argv[i+1]
 		elif argv[i] == "-server":
-			serverIP = argv[i+1]
+			HOST = argv[i+1]
 		elif argv[i] == "-port":
-			portNo = argv[i+1]
+			PORT = int(argv[i+1])
 		else:
 			error()
-
-	# read in server data from .mycal JSON
-	f = open('mpwordle/.mpwordle')
-	info = json.load(f)
-	HOST = info['servername']
-	PORT = info['port']
-	f.close()
 
 	# start creating the JSON to join server
 	cmdJSON = {}
