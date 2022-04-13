@@ -85,113 +85,41 @@ def handleCommand(cmdJSON, HOST, PORT):
 			print("Received:")
 			print(retJSONstr)
 
-
+def error():
+	print('Usage: ./mpwordle -name X -server X -port X')
+	exit(1)
 
 def main():
+	# Parse command line arguments
 	argc = len(sys.argv)
 	argv = sys.argv
-
-	# If the user has not entered enough args, or indicated -h, output the possible commands
-	if argc < 4 or argv[1] == '-h':
-		print('Usage: ./mycal CalendarName Command Args')
-		print('\t./mycal CalendarName add field value ... field value ... field value')
-		print('\t./mycal CalendarName remove identifier')
-		print('\t./mycal CalendarName update identifier field value')
-		print('\t./mycal CalendarName get date')
-		print('\t./mycal CalendarName getrange startDate stopDate')
-		print('\t./mycal CalendarName input filename')
-		exit(1)
-
-	# Lists to check whether the user has only entered valid fields and whether they have entered all required fields
-	validFields = ['date', 'time', 'duration', 'name', 'description', 'location']
-	reqFields = ['date', 'time', 'duration', 'name']
-
-	# track if the user used the input command and if so, what the file name is
-	inputFilename = False
+	if argc < 7 or argv[1] == '-h':
+		error()
+	
+	playerName, serverIP, portNo = None, None, None
+	for i in range(1, 7, 2):
+		if argv[i] == "-name":
+			playerName = argv[i+1]
+		elif argv[i] == "-server":
+			serverIP = argv[i+1]
+		elif argv[i] == "-port":
+			portNo = argv[i+1]
+		else:
+			error()
 
 	# read in server data from .mycal JSON
-	f = open('mycal/.mycal')
+	f = open('mpwordle/.mpwordle')
 	info = json.load(f)
 	HOST = info['servername']
 	PORT = info['port']
 	f.close()
 
-	# start creating the JSON for the command using python lists and dictionaries
+	# start creating the JSON to join server
 	cmdJSON = {}
-	calendar_name = argv[1]
-	cmdJSON["calendarName"] = calendar_name
-	action = argv[2]
-	cmdJSON["action"] = action
-	cmdJSON["arguments"] = {}
+	cmdJSON["MessageType"] = "Join"
+	cmdJSON["Data"] = {"Name":playerName, "Client":"Python-1.0"}
 
-	# handle the rest of the args according to the action the user has entered
-	if action == 'add':
-		#initialize all valid fields
-		for field in validFields:
-			cmdJSON['arguments'][field] = ""
-		#track what fields the user has provided
-		providedFields = []
-		#read in the values associated with each field
-		for i in range(3, len(argv), 2):
-			if argv[i] not in validFields:
-				print(f'Invalid Field: {argv[i]}')
-				print('Please only include these fields:')
-				print(validFields)
-				exit(1)
-			else:
-				providedFields.append(argv[i])
-				cmdJSON['arguments'][argv[i]] = argv[i+1]
-		# check that all required fields have been provided
-		for field in reqFields:
-			if field not in providedFields:
-				print('Not all required fields provided')
-				print('Please provide these fields:')
-				print(reqFields)
-				exit(1)
-	elif action == 'remove':
-		cmdJSON['arguments']['identifier'] = argv[3]
-	elif action == 'update':
-		cmdJSON['arguments']['identifier'] = argv[3]
-		#check that the provided field is a valid field
-		if argv[4] not in validFields:
-			print(f'Invalid Field: {argv[4]}')
-			print('Please only include these fields:')
-			print(validFields)
-			exit(1)
-		else:
-			cmdJSON['arguments']['field'] = argv[4]
-			cmdJSON['arguments']['value'] = argv[5]
-	elif action == 'get':
-		cmdJSON['arguments']['date'] = argv[3]
-	elif action == 'getrange':
-		cmdJSON['arguments']['start'] = argv[3]
-		cmdJSON['arguments']['end'] = argv[4]
-	elif action == 'input':
-		# override inputFilename (previously False)
-		inputFilename = argv[3]
-	else:
-		print('Unknown command')
-		print('Usage: ./mycal CalendarName Command Args')
-		print('\t./mycal CalendarName add field value ... field value ... field value')
-		print('\t./mycal CalendarName remove identifier')
-		print('\t./mycal CalendarName update identifier field value')
-		print('\t./mycal CalendarName get date')
-		print('\t./mycal CalendarName getrange startDate stopDate')
-		print('\t./mycal CalendarName input filename')
-		exit(1)
-
-	# if inputFilename was never overridden, just handle the single command
-	if inputFilename is False:
-		handleCommand(cmdJSON, HOST, PORT)
-	# otherwise, read in the JSON file provided by the user, and handle each command
-	else:
-		f = open(inputFilename)
-		commands = json.load(f)
-		f.close()
-		for command in commands:
-			currCmd = command
-			currCmd['calendarName'] = calendar_name
-			handleCommand(currCmd, HOST, PORT)
+	handleCommand(cmdJSON, HOST, PORT)
 
 if __name__ == '__main__':
 	main()
