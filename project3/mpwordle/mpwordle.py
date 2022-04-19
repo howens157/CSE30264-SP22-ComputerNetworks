@@ -71,5 +71,14 @@ def main():
 
 	handleCommand(cmdJSON, HOST, PORT)
 
+	# Client should receive startInstance action to receive port
+	instancePORT = "41101"
+	cmdJSON = {}
+	cmdJSON["MessageType"] = "JoinInstance"
+	cmdJSON["Data"] = {"Name":playerName}
+
+	handleCommand(cmdJSON, HOST, instancePORT)
+
+
 if __name__ == '__main__':
 	main()
