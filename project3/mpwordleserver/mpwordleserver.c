@@ -45,6 +45,8 @@ int numRounds;
 char *dictFile;
 bool debug;
 
+char answer[100];
+int answer_length;
 
 int sockfd;
 int new_fd;
@@ -305,9 +307,72 @@ void Server_Lobby (char* nLobbyPort, int numClients)
     }
 }
 
+void choose_answer() {
+	FILE* fp = fopen(dictFile, "r");
+	if (!fp) {
+		fprintf(stderr, "error: could not open dictionary\n");
+	}
+	int count = 0;
+	for (char c = getc(fp); c != EOF; c = getc(fp)) {
+		if (c == '\n') {
+			count += 1;
+		}
+	}
+	printf("count: %d\n", count);
+	// get random int from 1 to count
+	int rand_num = rand() % count;
+	rand_num += 1;
+	printf("rand num: %d\n", rand_num);
+
+	// get rand word from dictionary
+	fclose(fp);
+	fp = fopen(dictFile, "r");
+	int i = 0;
+	char line[256];
+	while(fgets(line, sizeof(line), fp)) {
+		i++;
+		if (i == rand_num) {
+			strcpy(answer, line);
+			break;
+		}
+	}
+	printf("answer: %s\n", answer);
+}
+
+char* print_guess_result(char* guess) {
+	printf("answer: %s\n", answer);
+	//printf("Your guess: ");
+	char result [100];
+	for (int i = 0; i < strlen(guess); i++) {
+		int letter_printed = 0;
+		if (!strncmp(&guess[i], &answer[i], 1)) {
+			// correct letter, correct spot, print in green
+			result[i] = 'g';
+		} else {
+			for (int j = 0; j < strlen(answer); j++) {
+				if (!strncmp(&guess[i], &answer[j], 1)) {
+					// correct letter, incorrect spot, print in yellow
+					result[i] = 'y';
+					letter_printed = 1;
+					break;
+				}
+			}
+			if (!letter_printed) {
+				result[i] = 'b';
+			}
+		}
+	}
+	printf("result: %s\n", result);
+	return (char*) result;
+}
+
 int main(int argc, char *argv[])
 {
-    int sockfd, new_fd;  // listen on sockfd, new connection on new_fd
+		// seed random number
+		time_t t;
+		srand((unsigned) time(&t));
+		
+		int sockfd, new_fd;  // listen on sockfd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr; // connector's address information
     socklen_t sin_size;
