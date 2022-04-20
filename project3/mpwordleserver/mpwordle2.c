@@ -49,9 +49,6 @@ bool debug;
 struct GameClientInfo **PlayersArr;
 
 
-int sockfd;
-int new_fd;
-
 struct ClientInfo 
 {
 	pthread_t threadClient;
@@ -80,13 +77,13 @@ void sigchld_handler(int s)
     errno = saved_errno;
 }
 
-void sigint_handler(int s)
-{
-    printf("\nShutting down safely\n");
-    close(new_fd);
-    close(sockfd);
-    exit(0);
-}
+// void sigint_handler(int s)
+// {
+//     printf("\nShutting down safely\n");
+//     close(new_fd);
+//     close(sockfd);
+//     exit(0);
+// }
 
 // get sockaddr, IPv4 or IPv6:
 void *get_in_addr(struct sockaddr *sa)
@@ -129,7 +126,7 @@ void * Game_Client (void * pData)
     json_builder_set_member_name(builder, "Rounds");
     json_builder_add_int_value(builder, numRounds);
     json_builder_set_member_name(builder, "PlayerInfo");
-    json_builder_begin_array(builder)
+    json_builder_begin_array(builder);
     int i;
     for(i = 0; i < numPlayers; i++)
     {
@@ -151,13 +148,11 @@ void * Game_Client (void * pData)
     printf("%s\n", startGame);
 
     uint16_t len = strlen(startGame);
-    len = htons(len);
-    send(pClient->socketClient, &len, sizeof(len), 0);
     send(pClient->socketClient, startGame, len, 0);
 
     //start game loop
     int currRound;
-    char *StartRound;
+    char *startRound;
     for(currRound = 1; currRound <= numRounds; currRound++)
     {
         //send StartRound message
@@ -172,7 +167,7 @@ void * Game_Client (void * pData)
         json_builder_set_member_name(builder, "RoundsRemaining");
         json_builder_add_int_value(builder, numRounds-currRound-1);
         json_builder_set_member_name(builder, "PlayerInfo");
-        json_builder_begin_array(builder)
+        json_builder_begin_array(builder);
         int i;
         for(i = 0; i < numPlayers; i++)
         {
@@ -191,13 +186,11 @@ void * Game_Client (void * pData)
         g_autoptr(JsonNode) root = json_builder_get_root(builder);
         g_autoptr(JsonGenerator) g = json_generator_new();
         json_generator_set_root(g, root);
-        startRound = json_generator_to_data(g, NULL);
+        char *startRound = json_generator_to_data(g, NULL);
 
         printf("%s\n", startRound);
 
         uint16_t len = strlen(startRound);
-        len = htons(len);
-        send(pClient->socketClient, &len, sizeof(len), 0);
         send(pClient->socketClient, startRound, len, 0);
 
         //initialize current round variables (new word, word length, numGuesses)
@@ -215,12 +208,13 @@ void * Game_Client (void * pData)
             //send GuessResponse message
 
             //check client's guess
-            
+            break;
             
         }
         
     }
   
+    return;
 }
 
 void * Thread_Client (void * pData)
@@ -296,8 +290,6 @@ void * Thread_Client (void * pData)
     printf("%s\n", joinResp);
 
     uint16_t len = strlen(joinResp);
-    len = htons(len);
-    send(pClient->socketClient, &len, sizeof(len), 0);
     send(pClient->socketClient, joinResp, len, 0);
     sleep(1);
     // This is a pretty good time to lock a mutex
@@ -334,8 +326,6 @@ void * Thread_Client (void * pData)
     printf("%s\n", startMsg);
 
     len = strlen(startMsg);
-    len = htons(len);
-    send(pClient->socketClient, &len, sizeof(len), 0);
     send(pClient->socketClient, startMsg, len, 0);
 
 	return NULL;
@@ -346,7 +336,7 @@ void Game_Lobby ()
     gameFull = false;
 	// Adapting this from Beej's Guide
 	
-    int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+    int sockfd, new_fd;  // listen on sockfd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr; // connector's address information
     socklen_t sin_size;
@@ -355,7 +345,7 @@ void Game_Lobby ()
     char s[INET6_ADDRSTRLEN];
     int rv;
 
-    PlayersArr = (struct ClientInfo **)(malloc(numPlayers*sizeof(struct ClientInfo *)));
+    PlayersArr = (struct GameClientInfo **)(malloc(numPlayers*sizeof(struct GameClientInfo *)));
 	
 	int nClientCount = 0;	
 
@@ -464,10 +454,10 @@ void Game_Lobby ()
         json_reader_end_member(cmdReader);
         json_reader_read_member(cmdReader, "Data");
         json_reader_read_member(cmdReader, "Name");
-        const char* name = json_reader_get_string_value(cmdReader);
+        char* name = (char*)json_reader_get_string_value(cmdReader);
         json_reader_end_member(cmdReader);
         json_reader_read_member(cmdReader, "Nonce");
-        const char* nonce = json_reader_get_string_value(cmdReader);
+        char* nonce = (char*)json_reader_get_string_value(cmdReader);
         json_reader_end_member(cmdReader);
         json_reader_end_member(cmdReader);				
         
@@ -486,7 +476,7 @@ void Game_Lobby ()
         json_builder_set_member_name(builder, "Name");
         json_builder_add_string_value(builder, name);
         json_builder_set_member_name(builder, "Number");
-        json_builder_add_string_value(builder, nClientCount+1);
+        json_builder_add_int_value(builder, nClientCount+1);
         json_builder_set_member_name(builder, "Result");
         json_builder_add_string_value(builder, "Yes");
         json_builder_end_object(builder);
@@ -497,12 +487,10 @@ void Game_Lobby ()
         json_generator_set_root(g, root);
         const char *joinInstRes = json_generator_to_data(g, NULL);
 
-        printf("%s\n", joinResp);
+        printf("%s\n", joinInstRes);
 
-        uint16_t len = strlen(joinResp);
-        len = htons(len);
-        send(PlayersArr[nClientCount]->socketClient, &len, sizeof(len), 0);
-        send(PlayersArr[nClientCount]->socketClient, joinResp, len, 0);
+        uint16_t len = strlen(joinInstRes);
+        send(PlayersArr[nClientCount]->socketClient, joinInstRes, len, 0);
 
 		/* From OS: Three Easy Pieces 
 		 *   https://pages.cs.wisc.edu/~remzi/OSTEP/threads-api.pdf */
@@ -516,13 +504,14 @@ void Game_Lobby ()
             pthread_mutex_lock(&g_BigLock);
             gameFull = true;
 			gameKeepLooping = 0;
-			sleep(15);
+			sleep(5);
             pthread_cond_broadcast(&cond);
             pthread_mutex_unlock(&g_BigLock);
 		}		
     }
 
-    //in the lobby, just return
+    printf("Game lobby closing\n");
+    close(sockfd);
     return;
 }
 
@@ -531,7 +520,7 @@ void Server_Lobby ()
     lobbyFull = false;
 	// Adapting this from Beej's Guide
 	
-    int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
+    int sockfd, new_fd;  // listen on sockfd, new connection on new_fd
     struct addrinfo hints, *servinfo, *p;
     struct sockaddr_storage their_addr; // connector's address information
     socklen_t sin_size;
@@ -634,25 +623,20 @@ void Server_Lobby ()
     if(cpid == 0)
     {
         //start a game
-        Game_Lobby()
+        Game_Lobby();
     }
 
+    wait(NULL); //only one child process, so just wait for any child process
+
+    printf("Gather Lobby closing\n");
+    close(sockfd);
     //in the lobby, just return
     return;
 }
 
 int main(int argc, char *argv[])
 {
-    int sockfd, new_fd;  // listen on sockfd, new connection on new_fd
-    struct addrinfo hints, *servinfo, *p;
-    struct sockaddr_storage their_addr; // connector's address information
-    socklen_t sin_size;
-    struct sigaction sa;
-    int yes=1;
-    char s[INET6_ADDRSTRLEN];
-    int rv;
-
-    signal(SIGINT, sigint_handler);
+    // signal(SIGINT, sigint_handler);
 
     numPlayers = 1; //change to 2
     lobPort = "41100";
