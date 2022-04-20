@@ -70,6 +70,13 @@ def main():
 	cmdJSON = {}
 	cmdJSON["MessageType"] = "JoinInstance"
 	cmdJSON["Data"] = {"Name":playerName}
+	cmdStr = json.dumps(cmdJSON)
+	print(f'sending JoinInstance to server: {cmdStr}\n')
+	s.sendall(bytes(cmdStr, encoding ="utf-8"))
+
+	# Receive JoinInstanceResult from server
+	retJSONstr = s.recv(1024).decode()
+	print(f'received JoinInstanceResult: {retJSONstr}\n')
 
 if __name__ == '__main__':
 	main()
