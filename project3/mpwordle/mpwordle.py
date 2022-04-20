@@ -38,46 +38,38 @@ def main():
 		else:
 			error()
 
-	# start creating the JSON to join server
+	# create socket, connect to server
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.connect((HOST, PORT))
+
+	# Send initial Join JSON
 	cmdJSON = {}
 	cmdJSON["MessageType"] = "Join"
 	cmdJSON["Data"] = {"Name":playerName, "Client":"Python-1.0"}
-
-	handleCommand(cmdJSON, HOST, PORT)
-
-	# convert the command json to a string to send to the server
 	cmdStr = json.dumps(cmdJSON)
-	# create socket
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	# connect to server
-	s.connect((HOST, PORT))
-	# send the length of the command string first then send the command string
-	print(f'sending command: {cmdStr}')
+	print(f'sending join to server: {cmdStr}\n')
 	s.sendall(bytes(cmdStr, encoding ="utf-8"))
-	# receive the length of the return message first 
-	# retLen = s.recv(2)
-	# retLen = struct.unpack('!H', retLen)[0]
-	# receive the return message and decode it and load it as json
+
+	# Receive JoinResult from server
 	retJSONstr = s.recv(1024).decode()
-	print(f'received command: {retJSONstr}')
+	print(f'received join response: {retJSONstr}\n')
 	retJSON = json.loads(retJSONstr)
 
-	print(retJSON)
-
+	# Receive StartInstance from server, get new port
 	retJSONstr = s.recv(1024).decode()
-	print(f'received command: {retJSONstr}')
+	print(f'received StartInstance: {retJSONstr}')
 	retJSON = json.loads(retJSONstr)
+	gamePORT = retJSON["Data"]["Port"]
+	
+	# Close lobby connection, open game connection
+	s.close()
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.connect((HOST, gamePORT))
 
-	print(retJSON)
-
-	# Client should receive startInstance action to receive port
-	instancePORT = "41101"
+	# Send JoinInstance to game server
 	cmdJSON = {}
 	cmdJSON["MessageType"] = "JoinInstance"
 	cmdJSON["Data"] = {"Name":playerName}
-
-	handleCommand(cmdJSON, HOST, instancePORT)
-
 
 if __name__ == '__main__':
 	main()
