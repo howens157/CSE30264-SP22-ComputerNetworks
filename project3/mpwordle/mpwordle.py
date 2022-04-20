@@ -15,33 +15,6 @@ import socket
 import json
 import sys
 import struct
-from datetime import datetime
-
-def handleCommand(cmdJSON, HOST, PORT):
-	# convert the command json to a string to send to the server
-	cmdStr = json.dumps(cmdJSON)
-	# create socket
-	with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-		# connect to server
-		s.connect((HOST, PORT))
-		# send the length of the command string first then send the command string
-		print(f'sending command: {cmdStr}')
-		s.sendall(bytes(cmdStr, encoding ="utf-8"))
-		# receive the length of the return message first 
-		# retLen = s.recv(2)
-		# retLen = struct.unpack('!H', retLen)[0]
-		# receive the return message and decode it and load it as json
-		retJSONstr = s.recv(1024).decode()
-		print(f'received command: {retJSONstr}')
-		retJSON = json.loads(retJSONstr)
-
-		print(retJSON)
-
-		retJSONstr = s.recv(1024).decode()
-		print(f'received command: {retJSONstr}')
-		retJSON = json.loads(retJSONstr)
-
-		print(retJSON)
 
 def error():
 	print('Usage: ./mpwordle -name X -server X -port X')
@@ -71,6 +44,31 @@ def main():
 	cmdJSON["Data"] = {"Name":playerName, "Client":"Python-1.0"}
 
 	handleCommand(cmdJSON, HOST, PORT)
+
+	# convert the command json to a string to send to the server
+	cmdStr = json.dumps(cmdJSON)
+	# create socket
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	# connect to server
+	s.connect((HOST, PORT))
+	# send the length of the command string first then send the command string
+	print(f'sending command: {cmdStr}')
+	s.sendall(bytes(cmdStr, encoding ="utf-8"))
+	# receive the length of the return message first 
+	# retLen = s.recv(2)
+	# retLen = struct.unpack('!H', retLen)[0]
+	# receive the return message and decode it and load it as json
+	retJSONstr = s.recv(1024).decode()
+	print(f'received command: {retJSONstr}')
+	retJSON = json.loads(retJSONstr)
+
+	print(retJSON)
+
+	retJSONstr = s.recv(1024).decode()
+	print(f'received command: {retJSONstr}')
+	retJSON = json.loads(retJSONstr)
+
+	print(retJSON)
 
 	# Client should receive startInstance action to receive port
 	instancePORT = "41101"
