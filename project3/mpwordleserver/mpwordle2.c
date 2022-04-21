@@ -99,7 +99,7 @@ void *get_in_addr(struct sockaddr *sa)
 void * Game_Client (void * pData)
 {
 	struct GameClientInfo * pClient;
-	struct GameClientInfo   threadClient;
+	struct GameClientInfo   myData;
 	
 	char szBuffer[BUFFER_MAX];
 	int	 numBytes;
@@ -108,20 +108,24 @@ void * Game_Client (void * pData)
 	pClient = (struct GameClientInfo *) pData;
 	
 	/* Copy it over to a local instance */
-	threadClient = *pClient;
+	myData = *pClient;
 
     printf("Starting player:\n");
-    printf("\tName: %s\n", pClient->name);
-    printf("\tNumber: %d\n", pClient->playerNum);
+    printf("\tName: %s\n", myData.name);
+    printf("\tNumber: %d\n", myData.playerNum);
 
     return NULL;
 
     //wait for game to be ready (what about chat here?)
+    printf("locking\n");
     pthread_mutex_lock(&g_BigLock);
     while(!gameFull){
+        printf("unlocking\n");
         pthread_cond_wait(&cond, &g_BigLock);
+        printf("locking\n");
     }
     pthread_mutex_unlock(&g_BigLock);
+    printf("unlocking\n");
 
     //send StartGame message
     g_autoptr(JsonBuilder) builder = json_builder_new();
@@ -155,7 +159,7 @@ void * Game_Client (void * pData)
     printf("%s\n", startGame);
 
     uint16_t len = strlen(startGame);
-    send(pClient->socketClient, startGame, len, 0);
+    send(myData.socketClient, startGame, len, 0);
 
     //start game loop
     int currRound;
@@ -198,7 +202,7 @@ void * Game_Client (void * pData)
         printf("%s\n", startRound);
 
         uint16_t len = strlen(startRound);
-        send(pClient->socketClient, startRound, len, 0);
+        send(myData.socketClient, startRound, len, 0);
 
         //initialize current round variables (new word, word length, numGuesses)
         int numGuesses = 0;
@@ -238,7 +242,7 @@ void * Thread_Client (void * pData)
 	/* Copy it over to a local instance */
 	threadClient = *pClient;
 
-    if ((numBytes = recv(pClient->socketClient, szBuffer, MAXDATASIZE-1, 0)) == -1) {
+    if ((numBytes = recv(threadClient.socketClient, szBuffer, MAXDATASIZE-1, 0)) == -1) {
         perror("recv");
         exit(1);
     }
@@ -246,7 +250,7 @@ void * Thread_Client (void * pData)
     szBuffer[numBytes] = '\0';
 
     // Debug / show what we got
-    printf("Received a message of %d bytes from Client %s\n", numBytes, pClient->szIdentifier);
+    printf("Received a message of %d bytes from Client %s\n", numBytes, threadClient.szIdentifier);
     printf("   Message: %s\n", szBuffer);
     
     // Do something with it
@@ -297,18 +301,22 @@ void * Thread_Client (void * pData)
     printf("%s\n", joinResp);
 
     uint16_t len = strlen(joinResp);
-    send(pClient->socketClient, joinResp, len, 0);
+    send(threadClient.socketClient, joinResp, len, 0);
     sleep(1);
     // This is a pretty good time to lock a mutex
+    printf("locking\n");
     pthread_mutex_lock(&g_BigLock);
     while(!lobbyFull){
+        printf("unlocking\n");
         pthread_cond_wait(&cond, &g_BigLock);
+        printf("locking\n");
     }
     // Do something dangerous here that impacts shared information
     testnum++;
     int mynum = testnum;
     // This is a pretty good time to unlock a mutex
     pthread_mutex_unlock(&g_BigLock);
+    printf("unlocking\n");
 	
     builder = json_builder_new();
     json_builder_begin_object(builder);
@@ -333,7 +341,7 @@ void * Thread_Client (void * pData)
     printf("%s\n", startMsg);
 
     len = strlen(startMsg);
-    send(pClient->socketClient, startMsg, len, 0);
+    send(threadClient.socketClient, startMsg, len, 0);
 
 	return NULL;
 }
@@ -442,9 +450,10 @@ void Game_Lobby ()
         szBuffer[numBytes] = '\0';
 
         // Debug / show what we got
+        printf("here0\n");
         printf("Received a message of %d bytes from Client %s\n", numBytes, PlayersArr[nClientCount]->szIdentifier);
         printf("   Message: %s\n", szBuffer);
-        
+        printf("here1\n");
         // Do something with it
         g_autoptr(JsonParser) cmdParser = json_parser_new();
         g_autoptr(GError) error = NULL;
@@ -455,7 +464,7 @@ void Game_Lobby ()
             exit(1);
         }
         g_autoptr(JsonNode) cmdRoot = json_parser_get_root(cmdParser);
-
+        printf("here2\n");
         g_autoptr(JsonReader) cmdReader = json_reader_new(cmdRoot);
         json_reader_read_member(cmdReader, "MessageType");
         const char* msgType = json_reader_get_string_value(cmdReader);
@@ -513,12 +522,14 @@ void Game_Lobby ()
 		// Bail out when the third client connects after sleeping a bit
 		if(nClientCount == numPlayers)
 		{
+            printf("locking\n");
             pthread_mutex_lock(&g_BigLock);
             gameFull = true;
 			gameKeepLooping = 0;
 			sleep(5);
             pthread_cond_broadcast(&cond);
             pthread_mutex_unlock(&g_BigLock);
+            printf("unlocking\n");
 		}		
     }
 
@@ -623,12 +634,14 @@ void Server_Lobby ()
 		// Bail out when the third client connects after sleeping a bit
 		if(nClientCount == numPlayers)
 		{
+            printf("locking\n");
             pthread_mutex_lock(&g_BigLock);
             lobbyFull = true;
 			g_bKeepLooping = 0;
 			sleep(5);
             pthread_cond_broadcast(&cond);
             pthread_mutex_unlock(&g_BigLock);
+            printf("unlocking\n");
 		}		
     }
     int cpid = fork();
