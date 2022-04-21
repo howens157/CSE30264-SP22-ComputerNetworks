@@ -59,7 +59,7 @@ def main():
 	retJSONstr = s.recv(1024).decode()
 	print(f'received StartInstance: {retJSONstr}')
 	retJSON = json.loads(retJSONstr)
-	gamePORT = retJSON["Data"]["Port"]
+	gamePORT = int(retJSON["Data"]["Port"])
 	
 	# Close lobby connection, open game connection
 	s.close()
@@ -69,7 +69,7 @@ def main():
 	# Send JoinInstance to game server
 	cmdJSON = {}
 	cmdJSON["MessageType"] = "JoinInstance"
-	cmdJSON["Data"] = {"Name":playerName}
+	cmdJSON["Data"] = {"Name":playerName, "Nonce":"tempnonce"}
 	cmdStr = json.dumps(cmdJSON)
 	print(f'sending JoinInstance to server: {cmdStr}\n')
 	s.sendall(bytes(cmdStr, encoding ="utf-8"))

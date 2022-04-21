@@ -47,6 +47,7 @@ int numRounds;
 char *dictFile;
 bool debug;
 struct GameClientInfo **PlayersArr;
+int testnum = 0;
 
 
 struct ClientInfo 
@@ -108,6 +109,12 @@ void * Game_Client (void * pData)
 	
 	/* Copy it over to a local instance */
 	threadClient = *pClient;
+
+    printf("Starting player:\n");
+    printf("\tName: %s\n", pClient->name);
+    printf("\tNumber: %d\n", pClient->playerNum);
+
+    return NULL;
 
     //wait for game to be ready (what about chat here?)
     pthread_mutex_lock(&g_BigLock);
@@ -214,7 +221,7 @@ void * Game_Client (void * pData)
         
     }
   
-    return;
+    return NULL;
 }
 
 void * Thread_Client (void * pData)
@@ -298,8 +305,8 @@ void * Thread_Client (void * pData)
         pthread_cond_wait(&cond, &g_BigLock);
     }
     // Do something dangerous here that impacts shared information
-    
-            
+    testnum++;
+    int mynum = testnum;
     // This is a pretty good time to unlock a mutex
     pthread_mutex_unlock(&g_BigLock);
 	
@@ -314,7 +321,7 @@ void * Thread_Client (void * pData)
     json_builder_set_member_name(builder, "Port");
     json_builder_add_string_value(builder, gamePort);
     json_builder_set_member_name(builder, "Nonce");
-    json_builder_add_string_value(builder, "TEMP");
+    json_builder_add_int_value(builder, mynum);
     json_builder_end_object(builder);
     json_builder_end_object(builder);
 
@@ -333,6 +340,7 @@ void * Thread_Client (void * pData)
 
 void Game_Lobby ()
 {
+    printf("starting game lobby\n");
     gameFull = false;
 	// Adapting this from Beej's Guide
 	
@@ -492,9 +500,13 @@ void Game_Lobby ()
         uint16_t len = strlen(joinInstRes);
         send(PlayersArr[nClientCount]->socketClient, joinInstRes, len, 0);
 
+        printf("new player: %s\n", PlayersArr[nClientCount]->name);
+        printf("new player: %d\n", PlayersArr[nClientCount]->playerNum);
+
 		/* From OS: Three Easy Pieces 
 		 *   https://pages.cs.wisc.edu/~remzi/OSTEP/threads-api.pdf */
-		pthread_create(&(PlayersArr[nClientCount]->threadClient), NULL, Game_Client, &PlayersArr[nClientCount]);
+        
+		pthread_create(&(PlayersArr[nClientCount]->threadClient), NULL, Game_Client, PlayersArr[nClientCount]);
 		
         nClientCount++;
         printf("%d of %d clients\n", nClientCount, numPlayers);
@@ -614,7 +626,7 @@ void Server_Lobby ()
             pthread_mutex_lock(&g_BigLock);
             lobbyFull = true;
 			g_bKeepLooping = 0;
-			sleep(15);
+			sleep(5);
             pthread_cond_broadcast(&cond);
             pthread_mutex_unlock(&g_BigLock);
 		}		
