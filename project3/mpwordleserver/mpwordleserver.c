@@ -13,7 +13,7 @@
 #include <stdbool.h>
 #include <json-glib/json-glib.h>
 #include <json-glib/json-gobject.h>
-#include "SocketHelper.h"
+//#include "SocketHelper.h"
 
 #define MAXDATASIZE 1024
 #define BUFFER_MAX 1000
@@ -26,12 +26,14 @@ int numRounds;
 int numGuesses = 1;
 char *dictFile;
 bool debug;
-char* answer;
+char answer [256];
 
 void choose_answer() {
+	printf("trying to open %s\n", dictFile);
 	FILE* fp = fopen(dictFile, "r");
 	if (!fp) {
 		fprintf(stderr, "error: could not open dictionary\n");
+		return;
 	}
 	int count = 0;
 	for (char c = getc(fp); c != EOF; c = getc(fp)) {
@@ -48,6 +50,10 @@ void choose_answer() {
 	// get rand word from dictionary
 	fclose(fp);
 	fp = fopen(dictFile, "r");
+	if (fp < 0) {
+		fprintf(stderr, "unable to open\n");
+		return;
+	}
 	int i = 0;
 	char line[256];
 	while(fgets(line, sizeof(line), fp)) {
@@ -60,7 +66,7 @@ void choose_answer() {
 	printf("answer: %s\n", answer);
 }
 
-void print_guess_result(char* guess, char *result) {
+void check_guess_result(char* guess, char *result) {
 	printf("answer: %s\n", answer);
 	//printf("Your guess: ");
 	for (int i = 0; i < strlen(guess); i++) {
@@ -86,10 +92,10 @@ void print_guess_result(char* guess, char *result) {
 	return;
 }
 
-int createSocket_TCP_Listen (char * pszServer, char * pszPort)
+/*int createSocket_TCP_Listen (char * pszServer, char * pszPort)
 {
     return createSocket_TCP_Listen_real (pszServer, pszPort, DEFAULT_LISTEN_BACKLOG);
-}
+}*/
 
 int createSocket_TCP_Listen_real (char * pszServer, char * pszPort, int nBacklog)
 {
@@ -160,6 +166,11 @@ int createSocket_TCP_Listen_real (char * pszServer, char * pszPort, int nBacklog
     }
 
     return serverSocket;
+}
+
+int createSocket_TCP_Listen (char * pszServer, char * pszPort)
+{
+    return createSocket_TCP_Listen_real (pszServer, pszPort, DEFAULT_LISTEN_BACKLOG);
 }
 
 void *get_in_addr(struct sockaddr *sa)
@@ -316,9 +327,9 @@ void Game_Instance()
     for(currRound = 1; currRound <= numRounds; currRound++)
     {
         //initialize game variables
-        // choose_answer();
-        answer = "HELLO";
-        int answerLen = strlen(answer);
+        choose_answer();
+        //answer = "HELLO";
+        int answerLen = strlen(answer) - 1;
         printf("This round's word is %s, len: %d\n", answer, answerLen);
 
         //send StartRound message
@@ -490,7 +501,9 @@ void Game_Instance()
                 json_builder_set_member_name(builder, "ReceiptTime");
                 json_builder_add_string_value(builder, "TEMPTIME");
                 json_builder_set_member_name(builder, "Result");
-                json_builder_add_string_value(builder, "GGGGG");
+                char result[answerLen];
+								check_guess_result(guess, result);
+								json_builder_add_string_value(builder, result);
                 json_builder_end_object(builder);
             }
             json_builder_end_array(builder);
@@ -592,7 +605,10 @@ void Game_Instance()
 
 int main(int argc, char *argv[])
 {
-    // signal(SIGINT, sigint_handler);
+    // seed random number
+		srand(time(0));
+		
+		// signal(SIGINT, sigint_handler);
 
     numPlayers = 1; //change to 2
     lobPort = "41100";
