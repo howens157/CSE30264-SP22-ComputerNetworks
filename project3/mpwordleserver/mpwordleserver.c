@@ -311,8 +311,6 @@ void Game_Instance()
     len = strlen(startGame);
     send(clientFD, startGame, len, 0);
 
-
-
     for(currRound = 1; currRound <= numRounds; currRound++)
     {
         //initialize game variables
@@ -388,7 +386,49 @@ void Game_Instance()
 
             len = strlen(startRound);
             send(clientFD, startRound, len, 0);
+
             //receive Guess message
+            memset(szBuffer, 0, BUFFER_MAX);
+            int	 numBytes;
+
+            printf("Receiving from %d\n", clientFD);
+            if ((numBytes = recv(clientFD, szBuffer, MAXDATASIZE-1, 0)) == -1) {
+                perror("recv");
+                exit(1);
+            }
+
+            szBuffer[numBytes] = '\0';
+            char szIdentifier[100];
+
+            nClientCount++;
+
+            sprintf(szIdentifier, "%s-%d", s, nClientCount);
+
+            // Debug / show what we got
+            printf("Received a message of %d bytes from Client %s\n", numBytes, szIdentifier);
+            printf("   Message: %s\n", szBuffer);
+            // Do something with it
+            g_autoptr(JsonParser) cmdParser = json_parser_new();
+            g_autoptr(GError) error = NULL;
+            json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
+            if(error != NULL)
+            {
+                g_critical("Unable to parse command: %s", error->message);
+                exit(1);
+            }
+            g_autoptr(JsonNode) cmdRoot = json_parser_get_root(cmdParser);
+            g_autoptr(JsonReader) cmdReader = json_reader_new(cmdRoot);
+            json_reader_read_member(cmdReader, "MessageType");
+            const char* msgType = json_reader_get_string_value(cmdReader);
+            json_reader_end_member(cmdReader);
+            json_reader_read_member(cmdReader, "Data");
+            json_reader_read_member(cmdReader, "Name");
+            char* name = (char*)json_reader_get_string_value(cmdReader);
+            json_reader_end_member(cmdReader);
+            json_reader_read_member(cmdReader, "Nonce");
+            int nonce = (int)json_reader_get_int_value(cmdReader);
+            json_reader_end_member(cmdReader);
+            json_reader_end_member(cmdReader);				
 
             //set receipt time in PlayersArr
 
