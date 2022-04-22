@@ -23,7 +23,7 @@ int numPlayers; //change to 2
 char *lobPort;
 char *gamePort;
 int numRounds;
-int numGuesses = 1;
+int numGuesses = 3;
 char *dictFile;
 bool debug;
 char answer [256];
@@ -486,7 +486,13 @@ void Game_Instance()
             json_builder_set_member_name(builder, "Data");
             json_builder_begin_object(builder);
             json_builder_set_member_name(builder, "Winner");
-            json_builder_add_string_value(builder, "Yes");
+            if (!strncmp(answer, guess, answerLen)) {
+							json_builder_add_string_value(builder, "Yes");
+							printf("we have a winner\n");
+						} else {
+							json_builder_add_string_value(builder, "No");
+							printf("no winner\n");
+						}
             json_builder_set_member_name(builder, "PlayerInfo");
             json_builder_begin_array(builder);
             for(i = 0; i < 1; i++)

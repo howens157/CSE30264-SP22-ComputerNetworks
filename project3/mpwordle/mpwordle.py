@@ -128,6 +128,18 @@ def main():
 			print(f'received GuessResult: {retJSONstr}\n')	
 			retJSON = json.loads(retJSONstr)
 			winner = retJSON['Data']['Winner']
+			result = retJSON['Data']['PlayerInfo'][0]['Result']
+			print(result)
+			i = 0
+			for letter in result:
+				if letter == 'G':
+					print("\033[92m" + guess[i] + "\033[0m", end='')
+				elif letter == 'Y':
+					print("\033[93m" + guess[i] + "\033[0m", end='')
+				elif letter == 'B':
+					print(guess[i], end='')
+				i = i + 1
+				print()
 
 			# Check if anyone won or if that was the last round
 			
