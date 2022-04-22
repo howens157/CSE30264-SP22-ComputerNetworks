@@ -23,8 +23,69 @@ int numPlayers; //change to 2
 char *lobPort;
 char *gamePort;
 int numRounds;
+int numGuesses = 5;
 char *dictFile;
 bool debug;
+char* answer;
+
+void choose_answer() {
+	FILE* fp = fopen(dictFile, "r");
+	if (!fp) {
+		fprintf(stderr, "error: could not open dictionary\n");
+	}
+	int count = 0;
+	for (char c = getc(fp); c != EOF; c = getc(fp)) {
+		if (c == '\n') {
+			count += 1;
+		}
+	}
+	printf("count: %d\n", count);
+	// get random int from 1 to count
+	int rand_num = rand() % count;
+	rand_num += 1;
+	printf("rand num: %d\n", rand_num);
+
+	// get rand word from dictionary
+	fclose(fp);
+	fp = fopen(dictFile, "r");
+	int i = 0;
+	char line[256];
+	while(fgets(line, sizeof(line), fp)) {
+		i++;
+		if (i == rand_num) {
+			strcpy(answer, line);
+			break;
+		}
+	}
+	printf("answer: %s\n", answer);
+}
+
+char* print_guess_result(char* guess) {
+	printf("answer: %s\n", answer);
+	//printf("Your guess: ");
+	char result [100];
+	for (int i = 0; i < strlen(guess); i++) {
+		int letter_printed = 0;
+		if (!strncmp(&guess[i], &answer[i], 1)) {
+			// correct letter, correct spot, print in green
+			result[i] = 'G';
+		} else {
+			for (int j = 0; j < strlen(answer); j++) {
+				if (!strncmp(&guess[i], &answer[j], 1)) {
+					// correct letter, incorrect spot, print in yellow
+					result[i] = 'Y';
+					letter_printed = 1;
+					break;
+				}
+			}
+			if (!letter_printed) {
+				result[i] = 'B';
+			}
+		}
+	}
+	printf("result: %s\n", result);
+	return (char*) result;
+}
 
 int createSocket_TCP_Listen (char * pszServer, char * pszPort)
 {
@@ -120,7 +181,14 @@ void Game_Instance()
     int nClientCount = 0;
     printf("game server: waiting for connections...\n");
     int serverFD =  createSocket_TCP_Listen(NULL, gamePort);
+    sin_size = sizeof their_addr;
     int clientFD = accept(serverFD, (struct sockaddr *)&their_addr, &sin_size);
+
+    if (clientFD == -1) 
+    {
+        perror("accept");
+        return;
+    }
 
     inet_ntop(their_addr.ss_family,
             get_in_addr((struct sockaddr *)&their_addr),
@@ -131,6 +199,7 @@ void Game_Instance()
     char szBuffer[BUFFER_MAX];
     int	 numBytes;
 
+    printf("Receiving from %d\n", clientFD);
     if ((numBytes = recv(clientFD, szBuffer, MAXDATASIZE-1, 0)) == -1) {
         perror("recv");
         exit(1);
@@ -165,15 +234,15 @@ void Game_Instance()
     char* name = (char*)json_reader_get_string_value(cmdReader);
     json_reader_end_member(cmdReader);
     json_reader_read_member(cmdReader, "Nonce");
-    char* nonce = (char*)json_reader_get_string_value(cmdReader);
+    int nonce = (int)json_reader_get_int_value(cmdReader);
     json_reader_end_member(cmdReader);
     json_reader_end_member(cmdReader);				
     
     //TODO check that nonce is one of the approved nonces 
-    char* clientNonce = nonce;
+    int clientNonce = nonce;
     char* clientName = name;
 
-    printf("%s %s %s\n", msgType, clientName, clientNonce);
+    printf("%s %s %d\n", msgType, clientName, clientNonce);
 
     g_autoptr(JsonBuilder) builder = json_builder_new();
     json_builder_begin_object(builder);
@@ -200,6 +269,137 @@ void Game_Instance()
     uint16_t len = strlen(joinInstRes);
     send(clientFD, joinInstRes, len, 0);
 
+    int clientScore = 0;
+    int clientNum = 1;
+    int currRound;
+    // Synchronization point if we have more than one player
+    // All players need to join
+    // Fill in that code later
+
+    //send StartGame message
+    builder = json_builder_new();
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "MessageType");
+    json_builder_add_string_value(builder, "StartGame");
+    json_builder_set_member_name(builder, "Data");
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "Rounds");
+    json_builder_add_int_value(builder, numRounds);
+    json_builder_set_member_name(builder, "PlayerInfo");
+    json_builder_begin_array(builder);
+    int i;
+    for(i = 0; i < 1; i++)
+    {
+        json_builder_begin_object(builder);
+        json_builder_set_member_name(builder, "Name");
+        json_builder_add_string_value(builder, clientName);
+        json_builder_set_member_name(builder, "Number");
+        json_builder_add_int_value(builder, clientNum);
+        json_builder_end_object(builder);
+    }
+    json_builder_end_array(builder);
+    json_builder_end_object(builder);
+    json_builder_end_object(builder);
+
+    root = json_builder_get_root(builder);
+    g = json_generator_new();
+    json_generator_set_root(g, root);
+    const char *startGame = json_generator_to_data(g, NULL);
+
+    printf("StartGame msg: %s\n", startGame);
+
+    len = strlen(startGame);
+    send(clientFD, startGame, len, 0);
+
+
+
+    for(currRound = 1; currRound <= numRounds; currRound++)
+    {
+        //initialize game variables
+        choose_answer();
+        int answerLen = strlen(answer);
+        printf("This round's word is %s, len: %d\n", answer, answerLen);
+
+        //send StartRound message
+        builder = json_builder_new();
+        json_builder_begin_object(builder);
+        json_builder_set_member_name(builder, "MessageType");
+        json_builder_add_string_value(builder, "StartRound");
+        json_builder_set_member_name(builder, "Data");
+        json_builder_begin_object(builder);
+        json_builder_set_member_name(builder, "WordLength");
+        json_builder_add_int_value(builder, answerLen);
+        json_builder_set_member_name(builder, "Round");
+        json_builder_add_int_value(builder, currRound);
+        json_builder_set_member_name(builder, "RoundsRemaining");
+        json_builder_add_int_value(builder, numRounds-currRound-1);
+        json_builder_set_member_name(builder, "PlayerInfo");
+        json_builder_begin_array(builder);
+        for(i = 0; i < 1; i++)
+        {
+            json_builder_begin_object(builder);
+            json_builder_set_member_name(builder, "Name");
+            json_builder_add_string_value(builder, clientName);
+            json_builder_set_member_name(builder, "Number");
+            json_builder_add_int_value(builder, clientNum);
+            json_builder_set_member_name(builder, "Score");
+            json_builder_add_int_value(builder, clientScore);
+            json_builder_end_object(builder);
+        }
+        json_builder_end_array(builder);
+        json_builder_end_object(builder);
+        json_builder_end_object(builder);
+
+        root = json_builder_get_root(builder);
+        g = json_generator_new();
+        json_generator_set_root(g, root);
+        char *startRound = json_generator_to_data(g, NULL);
+
+        printf("%s\n", startRound);
+
+        len = strlen(startRound);
+        send(clientFD, startRound, len, 0);
+
+        int currGuess;
+        for(currGuess = 1; currGuess <= numGuesses; currGuess++)
+        {
+            //Send PromptForGuess Message
+            builder = json_builder_new();
+            json_builder_begin_object(builder);
+            json_builder_set_member_name(builder, "MessageType");
+            json_builder_add_string_value(builder, "PromptForGuess");
+            json_builder_set_member_name(builder, "Data");
+            json_builder_begin_object(builder);
+            json_builder_set_member_name(builder, "WordLength");
+            json_builder_add_int_value(builder, answerLen);
+            json_builder_set_member_name(builder, "Name");
+            json_builder_add_String_value(builder, clientName);
+            json_builder_set_member_name(builder, "GuessNumber");
+            json_builder_add_int_value(builder, currGuess);
+            json_builder_end_object(builder);
+            json_builder_end_object(builder);
+
+            root = json_builder_get_root(builder);
+            g = json_generator_new();
+            json_generator_set_root(g, root);
+            char *startRound = json_generator_to_data(g, NULL);
+
+            printf("%s\n", startRound);
+
+            len = strlen(startRound);
+            send(clientFD, startRound, len, 0);
+            //receive Guess message
+
+            //set receipt time in PlayersArr
+
+            //send GuessResponse message
+
+            //check client's guess
+            break;
+            
+        }
+    }
+
     sleep(5);
 }
 
@@ -210,7 +410,7 @@ int main(int argc, char *argv[])
     numPlayers = 1; //change to 2
     lobPort = "41100";
     gamePort = "41101";
-    numRounds = 3;
+    numRounds = 1;
     dictFile = "defaultDict.txt";
     debug = false;
 

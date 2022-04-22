@@ -39,8 +39,8 @@ def main():
 			error()
 
 	# create socket, connect to server
-	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.connect((HOST, PORT))
+	# s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	# s.connect((HOST, PORT))
 
 	# # Send initial Join JSON
 	# cmdJSON = {}
@@ -83,8 +83,16 @@ def main():
 	myNum = int(retJSON["Data"]["Number"])
 
 	# Receive StartGame from server
-	# retJSONstr = s.recv(1024).decode()
-	# print(f'received StartGame: {retJSONstr}\n')
+	retJSONstr = s.recv(1024).decode()
+	print(f'received StartGame: {retJSONstr}\n')
+	retJSON = json.loads(retJSONstr)
+	print(retJSON)
+
+	# Receive StartGame from server
+	retJSONstr = s.recv(1024).decode()
+	print(f'received StartRound: {retJSONstr}\n')
+	retJSON = json.loads(retJSONstr)
+	print(retJSON)
 
 if __name__ == '__main__':
 	main()
