@@ -74,7 +74,7 @@ def main():
 	cmdJSON["Data"] = {"Name":playerName, "Nonce":nonce}
 	cmdStr = json.dumps(cmdJSON)
 	print(f'sending JoinInstance to server: {cmdStr}\n')
-	s.sendall(bytes(cmdStr, encoding ="utf-8"))
+	s.sendall(cmdStr.encode())
 
 	# Receive JoinInstanceResult from server
 	retJSONstr = s.recv(1024).decode()
@@ -86,13 +86,52 @@ def main():
 	retJSONstr = s.recv(1024).decode()
 	print(f'received StartGame: {retJSONstr}\n')
 	retJSON = json.loads(retJSONstr)
-	print(retJSON)
+	gameRounds = int(retJSON["Data"]["Rounds"])
+	for rnd in range(gameRounds):
+		# Wait to receive StartRound
+		retJSONstr = s.recv(1024).decode()
+		print(f'received StartRound: {retJSONstr}\n')
+		retJSON = json.loads(retJSONstr)
+		wordLen = retJSON["Data"]["WordLength"]
+		print("Current word is " + wordLen + " letters long")
 
-	# Receive StartGame from server
-	retJSONstr = s.recv(1024).decode()
-	print(f'received StartRound: {retJSONstr}\n')
-	retJSON = json.loads(retJSONstr)
-	print(retJSON)
+		# Loop until RoundsRemaining is 0
+		while True:
+			retJSONstr = s.recv(1024).decode()
+			print(f'received StartRound: {retJSONstr}\n')
+			retJSON = json.loads(retJSONstr)
+			attemptsRemaining = int(retJSON["Data"]["RoundsRemaining"])
+
+			# Check how many attemps remain
+			if attemptsRemaining == 0:
+				print("No attempts remaining. Round is over!")
+				break
+
+			# Receive server PromptForGuess
+			retJSONstr = s.recv(1024).decode()
+			print(f'received PromptForGuess: {retJSONstr}\n')
+
+			# Get user input for guess
+			while True:
+				guess = input("Input your guess: ")
+				if len(guess) == wordLen:
+					break
+				else:
+					print("Input is incorrect length, word is " + str(wordLen) + " characters")
+			cmdJSON = {}
+			cmdJSON["MessageType"] = "Guess"
+			cmdJSON["Data"] = {"Name":playerName, "Guess":str(guess)}
+			cmdStr = json.dumps(cmdJSON)
+			print(f'sending Guess to server: {cmdStr}\n')
+			s.sendall(cmdStr.encode())
+
+			# Get GuessResponse from server
+			retJSONstr = s.recv(1024).decode()
+			print(f'received GuessResponse: {retJSONstr}\n')
+			
+			# Get GuessResult from server
+			retJSONstr = s.recv(1024).decode()
+			print(f'received GuessResult: {retJSONstr}\n')			
 
 if __name__ == '__main__':
 	main()
