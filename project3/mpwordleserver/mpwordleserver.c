@@ -23,7 +23,7 @@ int numPlayers; //change to 2
 char *lobPort;
 char *gamePort;
 int numRounds;
-int numGuesses = 5;
+int numGuesses = 1;
 char *dictFile;
 bool debug;
 char* answer;
@@ -60,10 +60,9 @@ void choose_answer() {
 	printf("answer: %s\n", answer);
 }
 
-char* print_guess_result(char* guess) {
+void print_guess_result(char* guess, char *result) {
 	printf("answer: %s\n", answer);
 	//printf("Your guess: ");
-	char result [100];
 	for (int i = 0; i < strlen(guess); i++) {
 		int letter_printed = 0;
 		if (!strncmp(&guess[i], &answer[i], 1)) {
@@ -84,7 +83,7 @@ char* print_guess_result(char* guess) {
 		}
 	}
 	printf("result: %s\n", result);
-	return (char*) result;
+	return;
 }
 
 int createSocket_TCP_Listen (char * pszServer, char * pszPort)
@@ -268,6 +267,7 @@ void Game_Instance()
 
     uint16_t len = strlen(joinInstRes);
     send(clientFD, joinInstRes, len, 0);
+    sleep(1);
 
     int clientScore = 0;
     int clientNum = 1;
@@ -311,10 +311,13 @@ void Game_Instance()
     len = strlen(startGame);
     send(clientFD, startGame, len, 0);
 
+    sleep(1);
+
     for(currRound = 1; currRound <= numRounds; currRound++)
     {
         //initialize game variables
-        choose_answer();
+        // choose_answer();
+        answer = "HELLO";
         int answerLen = strlen(answer);
         printf("This round's word is %s, len: %d\n", answer, answerLen);
 
@@ -330,7 +333,7 @@ void Game_Instance()
         json_builder_set_member_name(builder, "Round");
         json_builder_add_int_value(builder, currRound);
         json_builder_set_member_name(builder, "RoundsRemaining");
-        json_builder_add_int_value(builder, numRounds-currRound-1);
+        json_builder_add_int_value(builder, numRounds-currRound+1);
         json_builder_set_member_name(builder, "PlayerInfo");
         json_builder_begin_array(builder);
         for(i = 0; i < 1; i++)
@@ -357,6 +360,7 @@ void Game_Instance()
 
         len = strlen(startRound);
         send(clientFD, startRound, len, 0);
+        sleep(1);
 
         int currGuess;
         for(currGuess = 1; currGuess <= numGuesses; currGuess++)
@@ -371,7 +375,7 @@ void Game_Instance()
             json_builder_set_member_name(builder, "WordLength");
             json_builder_add_int_value(builder, answerLen);
             json_builder_set_member_name(builder, "Name");
-            json_builder_add_String_value(builder, clientName);
+            json_builder_add_string_value(builder, clientName);
             json_builder_set_member_name(builder, "GuessNumber");
             json_builder_add_int_value(builder, currGuess);
             json_builder_end_object(builder);
@@ -380,14 +384,14 @@ void Game_Instance()
             root = json_builder_get_root(builder);
             g = json_generator_new();
             json_generator_set_root(g, root);
-            char *startRound = json_generator_to_data(g, NULL);
+            char *promptGuess = json_generator_to_data(g, NULL);
 
-            printf("%s\n", startRound);
+            printf("%s\n", promptGuess);
 
-            len = strlen(startRound);
-            send(clientFD, startRound, len, 0);
+            len = strlen(promptGuess);
+            send(clientFD, promptGuess, len, 0);
 
-            //receive Guess message
+            // receive Guess message
             memset(szBuffer, 0, BUFFER_MAX);
             int	 numBytes;
 
@@ -398,11 +402,6 @@ void Game_Instance()
             }
 
             szBuffer[numBytes] = '\0';
-            char szIdentifier[100];
-
-            nClientCount++;
-
-            sprintf(szIdentifier, "%s-%d", s, nClientCount);
 
             // Debug / show what we got
             printf("Received a message of %d bytes from Client %s\n", numBytes, szIdentifier);
@@ -419,26 +418,174 @@ void Game_Instance()
             g_autoptr(JsonNode) cmdRoot = json_parser_get_root(cmdParser);
             g_autoptr(JsonReader) cmdReader = json_reader_new(cmdRoot);
             json_reader_read_member(cmdReader, "MessageType");
-            const char* msgType = json_reader_get_string_value(cmdReader);
+            msgType = json_reader_get_string_value(cmdReader);
             json_reader_end_member(cmdReader);
             json_reader_read_member(cmdReader, "Data");
-            json_reader_read_member(cmdReader, "Name");
-            char* name = (char*)json_reader_get_string_value(cmdReader);
+            // maybe process name
+            // json_reader_read_member(cmdReader, "Name");
+            // char* name = (char*)json_reader_get_string_value(cmdReader);
+            // json_reader_end_member(cmdReader);
+            json_reader_read_member(cmdReader, "Guess");
+            char *guess = (char*)json_reader_get_string_value(cmdReader);
             json_reader_end_member(cmdReader);
-            json_reader_read_member(cmdReader, "Nonce");
-            int nonce = (int)json_reader_get_int_value(cmdReader);
-            json_reader_end_member(cmdReader);
-            json_reader_end_member(cmdReader);				
+            json_reader_end_member(cmdReader);		
+
+            printf("%s guessed %s\n", clientName, guess);		
 
             //set receipt time in PlayersArr
 
             //send GuessResponse message
+            builder = json_builder_new();
+            json_builder_begin_object(builder);
+            json_builder_set_member_name(builder, "MessageType");
+            json_builder_add_string_value(builder, "GuessReponse");
+            json_builder_set_member_name(builder, "Data");
+            json_builder_begin_object(builder);
+            json_builder_set_member_name(builder, "Name");
+            json_builder_add_string_value(builder, clientName);
+            json_builder_set_member_name(builder, "Guess");
+            json_builder_add_string_value(builder, guess);
+            json_builder_set_member_name(builder, "Accepted");
+            json_builder_add_string_value(builder, "Yes");
+            json_builder_end_object(builder);
+            json_builder_end_object(builder);
+
+            root = json_builder_get_root(builder);
+            g = json_generator_new();
+            json_generator_set_root(g, root);
+            char *guessResponse = json_generator_to_data(g, NULL);
+
+            printf("%s\n", guessResponse);
+
+            len = strlen(guessResponse);
+            send(clientFD, guessResponse, len, 0);
+            sleep(1);
 
             //check client's guess
-            break;
-            
+
+            // Synchronization point if we have more than one player
+                // All players need to have sent a guess
+                // Fill in that code later
+
+            //send GuessResult
+            builder = json_builder_new();
+            json_builder_begin_object(builder);
+            json_builder_set_member_name(builder, "MessageType");
+            json_builder_add_string_value(builder, "GuessResult");
+            json_builder_set_member_name(builder, "Data");
+            json_builder_begin_object(builder);
+            json_builder_set_member_name(builder, "Winner");
+            json_builder_add_string_value(builder, "Yes");
+            json_builder_set_member_name(builder, "PlayerInfo");
+            json_builder_begin_array(builder);
+            for(i = 0; i < 1; i++)
+            {
+                json_builder_begin_object(builder);
+                json_builder_set_member_name(builder, "Name");
+                json_builder_add_string_value(builder, clientName);
+                json_builder_set_member_name(builder, "Number");
+                json_builder_add_int_value(builder, clientNum);
+                json_builder_set_member_name(builder, "Correct");
+                json_builder_add_string_value(builder, "Yes");
+                json_builder_set_member_name(builder, "ReceiptTime");
+                json_builder_add_string_value(builder, "TEMPTIME");
+                json_builder_set_member_name(builder, "Result");
+                json_builder_add_string_value(builder, "GGGGG");
+                json_builder_end_object(builder);
+            }
+            json_builder_end_array(builder);
+            json_builder_end_object(builder);
+            json_builder_end_object(builder);
+
+            root = json_builder_get_root(builder);
+            g = json_generator_new();
+            json_generator_set_root(g, root);
+            char *GuessResult = json_generator_to_data(g, NULL);
+
+            printf("%s\n", GuessResult);
+
+            len = strlen(GuessResult);
+            send(clientFD, GuessResult, len, 0);
+            sleep(1); 
+
+            // Decision point – was the guess successful or are there more rounds of guessing allowed?
+                // Fill in that code later
         }
+        //send GuessResult
+        builder = json_builder_new();
+        json_builder_begin_object(builder);
+        json_builder_set_member_name(builder, "MessageType");
+        json_builder_add_string_value(builder, "EndRound");
+        json_builder_set_member_name(builder, "Data");
+        json_builder_begin_object(builder);
+        json_builder_set_member_name(builder, "RoundsRemaining");
+        json_builder_add_int_value(builder, numRounds-currRound+1);
+        json_builder_set_member_name(builder, "PlayerInfo");
+        json_builder_begin_array(builder);
+        for(i = 0; i < 1; i++)
+        {
+            json_builder_begin_object(builder);
+            json_builder_set_member_name(builder, "Name");
+            json_builder_add_string_value(builder, clientName);
+            json_builder_set_member_name(builder, "Number");
+            json_builder_add_int_value(builder, clientNum);
+            json_builder_set_member_name(builder, "ScoreEarned");
+            json_builder_add_int_value(builder, clientScore);
+            json_builder_set_member_name(builder, "Winner");
+            json_builder_add_string_value(builder, "Yes");
+            json_builder_end_object(builder);
+        }
+        json_builder_end_array(builder);
+        json_builder_end_object(builder);
+        json_builder_end_object(builder);
+
+        root = json_builder_get_root(builder);
+        g = json_generator_new();
+        json_generator_set_root(g, root);
+        char *EndRound = json_generator_to_data(g, NULL);
+
+        printf("%s\n", EndRound);
+
+        len = strlen(EndRound);
+        send(clientFD, EndRound, len, 0);
+        sleep(1); 
     }
+
+    //send EndGame message
+    builder = json_builder_new();
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "MessageType");
+    json_builder_add_string_value(builder, "EndGame");
+    json_builder_set_member_name(builder, "Data");
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "WinnerName");
+    json_builder_add_string_value(builder, clientName);
+    json_builder_set_member_name(builder, "PlayerInfo");
+    json_builder_begin_array(builder);
+    for(i = 0; i < 1; i++)
+    {
+        json_builder_begin_object(builder);
+        json_builder_set_member_name(builder, "Name");
+        json_builder_add_string_value(builder, clientName);
+        json_builder_set_member_name(builder, "Number");
+        json_builder_add_int_value(builder, clientNum);
+        json_builder_set_member_name(builder, "Score");
+        json_builder_add_int_value(builder, clientScore);
+        json_builder_end_object(builder);
+    }
+    json_builder_end_array(builder);
+    json_builder_end_object(builder);
+    json_builder_end_object(builder);
+
+    root = json_builder_get_root(builder);
+    g = json_generator_new();
+    json_generator_set_root(g, root);
+    char *EndGame = json_generator_to_data(g, NULL);
+
+    printf("%s\n", EndGame);
+
+    len = strlen(EndGame);
+    send(clientFD, EndGame, len, 0);
 
     sleep(5);
 }

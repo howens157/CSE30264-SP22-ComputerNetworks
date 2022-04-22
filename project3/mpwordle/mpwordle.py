@@ -87,30 +87,23 @@ def main():
 	print(f'received StartGame: {retJSONstr}\n')
 	retJSON = json.loads(retJSONstr)
 	gameRounds = int(retJSON["Data"]["Rounds"])
+
 	for rnd in range(gameRounds):
 		# Wait to receive StartRound
 		retJSONstr = s.recv(1024).decode()
 		print(f'received StartRound: {retJSONstr}\n')
 		retJSON = json.loads(retJSONstr)
 		wordLen = retJSON["Data"]["WordLength"]
-		print("Current word is " + wordLen + " letters long")
+		print("Current word is " + str(wordLen) + " letters long")
+		retJSON = json.loads(retJSONstr)
+		roundsRemaining = int(retJSON["Data"]["RoundsRemaining"])
+
+		# Receive server PromptForGuess
+		retJSONstr = s.recv(1024).decode()
+		print(f'received PromptForGuess: {retJSONstr}\n')
 
 		# Loop until RoundsRemaining is 0
 		while True:
-			retJSONstr = s.recv(1024).decode()
-			print(f'received StartRound: {retJSONstr}\n')
-			retJSON = json.loads(retJSONstr)
-			attemptsRemaining = int(retJSON["Data"]["RoundsRemaining"])
-
-			# Check how many attemps remain
-			if attemptsRemaining == 0:
-				print("No attempts remaining. Round is over!")
-				break
-
-			# Receive server PromptForGuess
-			retJSONstr = s.recv(1024).decode()
-			print(f'received PromptForGuess: {retJSONstr}\n')
-
 			# Get user input for guess
 			while True:
 				guess = input("Input your guess: ")
@@ -118,6 +111,7 @@ def main():
 					break
 				else:
 					print("Input is incorrect length, word is " + str(wordLen) + " characters")
+
 			cmdJSON = {}
 			cmdJSON["MessageType"] = "Guess"
 			cmdJSON["Data"] = {"Name":playerName, "Guess":str(guess)}
@@ -131,7 +125,23 @@ def main():
 			
 			# Get GuessResult from server
 			retJSONstr = s.recv(1024).decode()
-			print(f'received GuessResult: {retJSONstr}\n')			
+			print(f'received GuessResult: {retJSONstr}\n')	
+			retJSON = json.loads(retJSONstr)
+			winner = retJSON['Data']['Winner']
 
+			# Check if anyone won or if that was the last round
+			
+			if winner == 'Yes':
+				print("Someone guessed right! Round is over!")
+				break
+
+		#receive endRound		
+		retJSONstr = s.recv(1024).decode()
+		print(f'received EndRound: {retJSONstr}\n')	
+
+	#receive endGame
+	retJSONstr = s.recv(1024).decode()
+	print(f'received EndGame: {retJSONstr}\n')	
+	
 if __name__ == '__main__':
 	main()
