@@ -63,6 +63,18 @@ void choose_answer() {
 			break;
 		}
 	}
+    for(i = 0; i < 256; i++)
+    {
+        if(answer[i] >= 'a' && answer[i] <= 'z')
+        {
+            answer[i] -= 32;
+        }
+        if(answer[i] == '\n')
+        {
+            answer[i] = '\0';
+            break;
+        }
+    }
 	printf("answer: %s\n", answer);
 }
 
@@ -329,7 +341,7 @@ void Game_Instance()
         //initialize game variables
         choose_answer();
         //answer = "HELLO";
-        int answerLen = strlen(answer) - 1;
+        int answerLen = strlen(answer);
         printf("This round's word is %s, len: %d\n", answer, answerLen);
 
         //send StartRound message
@@ -471,8 +483,14 @@ void Game_Instance()
             len = strlen(guessResponse);
             send(clientFD, guessResponse, len, 0);
             sleep(1);
-
+            bool someoneWon = false; //will be a global
+            bool iWon = false;
             //check client's guess
+            if (!strncmp(answer, guess, answerLen)) {
+                someoneWon = true;
+                iWon = true;
+                printf("we have a winner\n");
+            }
 
             // Synchronization point if we have more than one player
                 // All players need to have sent a guess
@@ -486,13 +504,11 @@ void Game_Instance()
             json_builder_set_member_name(builder, "Data");
             json_builder_begin_object(builder);
             json_builder_set_member_name(builder, "Winner");
-            if (!strncmp(answer, guess, answerLen)) {
-							json_builder_add_string_value(builder, "Yes");
-							printf("we have a winner\n");
-						} else {
-							json_builder_add_string_value(builder, "No");
-							printf("no winner\n");
-						}
+            if (someoneWon) {
+                json_builder_add_string_value(builder, "Yes");
+            } else {
+                json_builder_add_string_value(builder, "No");
+            }
             json_builder_set_member_name(builder, "PlayerInfo");
             json_builder_begin_array(builder);
             for(i = 0; i < 1; i++)
@@ -503,13 +519,17 @@ void Game_Instance()
                 json_builder_set_member_name(builder, "Number");
                 json_builder_add_int_value(builder, clientNum);
                 json_builder_set_member_name(builder, "Correct");
-                json_builder_add_string_value(builder, "Yes");
+                if (iWon) {
+                    json_builder_add_string_value(builder, "Yes");
+                } else {
+                    json_builder_add_string_value(builder, "No");
+                }
                 json_builder_set_member_name(builder, "ReceiptTime");
                 json_builder_add_string_value(builder, "TEMPTIME");
                 json_builder_set_member_name(builder, "Result");
                 char result[answerLen];
-								check_guess_result(guess, result);
-								json_builder_add_string_value(builder, result);
+                check_guess_result(guess, result);
+                json_builder_add_string_value(builder, result);
                 json_builder_end_object(builder);
             }
             json_builder_end_array(builder);
@@ -529,8 +549,10 @@ void Game_Instance()
 
             // Decision point – was the guess successful or are there more rounds of guessing allowed?
                 // Fill in that code later
+            if(someoneWon)
+                break;
         }
-        //send GuessResult
+        //send EndRound
         builder = json_builder_new();
         json_builder_begin_object(builder);
         json_builder_set_member_name(builder, "MessageType");
@@ -612,15 +634,15 @@ void Game_Instance()
 int main(int argc, char *argv[])
 {
     // seed random number
-		srand(time(0));
+    srand(time(0));
 		
-		// signal(SIGINT, sigint_handler);
+    // signal(SIGINT, sigint_handler);
 
     numPlayers = 1; //change to 2
     lobPort = "41100";
     gamePort = "41101";
     numRounds = 1;
-    dictFile = "defaultDict.txt";
+    dictFile = "mpwordleserver/defaultDict.txt";
     debug = false;
 
     if(argc > 12) {

@@ -139,17 +139,21 @@ def main():
 				elif letter == 'B':
 					print(guess[i], end='')
 				i = i + 1
-				print()
-
+			print()
 			# Check if anyone won or if that was the last round
 			
 			if winner == 'Yes':
 				print("Someone guessed right! Round is over!")
+			
+			#receive endRound or next promptGuess	
+			retJSONstr = s.recv(1024).decode()
+			retJSON = json.loads(retJSONstr)
+			if retJSON['MessageType'] == 'EndRound':
+				print(f'received EndRound: {retJSONstr}\n')	
 				break
+			print(f'received PromptForGuess: {retJSONstr}\n')
 
-		#receive endRound		
-		retJSONstr = s.recv(1024).decode()
-		print(f'received EndRound: {retJSONstr}\n')	
+		
 
 	#receive endGame
 	retJSONstr = s.recv(1024).decode()
