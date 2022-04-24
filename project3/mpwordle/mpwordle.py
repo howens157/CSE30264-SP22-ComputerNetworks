@@ -39,29 +39,29 @@ def main():
 			error()
 
 	# create socket, connect to server
-	# s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	# s.connect((HOST, PORT))
+	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	s.connect((HOST, 41100))
 
-	# # Send initial Join JSON
-	# cmdJSON = {}
-	# cmdJSON["MessageType"] = "Join"
-	# cmdJSON["Data"] = {"Name":playerName, "Client":"Python-1.0"}
-	# cmdStr = json.dumps(cmdJSON)
-	# print(f'sending join to server: {cmdStr}\n')
-	# s.sendall(bytes(cmdStr, encoding ="utf-8"))
+	# Send initial Join JSON
+	cmdJSON = {}
+	cmdJSON["MessageType"] = "Join"
+	cmdJSON["Data"] = {"Name":playerName, "Client":"OwensKorbelGriffith-Python"}
+	cmdStr = json.dumps(cmdJSON)
+	print(f'sending join to server: {cmdStr}\n')
+	s.sendall(bytes(cmdStr, encoding ="utf-8"))
 
-	# # Receive JoinResult from server
-	# retJSONstr = s.recv(1024).decode()
-	# print(f'received join response: {retJSONstr}\n')
-	# retJSON = json.loads(retJSONstr)
+	# Receive JoinResult from server
+	retJSONstr = s.recv(1024).decode()
+	print(f'received join response: {retJSONstr}\n')
+	retJSON = json.loads(retJSONstr)
 
-	# # Receive StartInstance from server, get new port
-	# retJSONstr = s.recv(1024).decode()
-	# print(f'received StartInstance: {retJSONstr}')
-	# retJSON = json.loads(retJSONstr)
-	# gamePORT = int(retJSON["Data"]["Port"])
-	# nonce = retJSON["Data"]["Nonce"]
-	nonce = 7
+
+	# Receive StartInstance from server, get new port
+	retJSONstr = s.recv(1024).decode()
+	print(f'received StartInstance: {retJSONstr}')
+	retJSON = json.loads(retJSONstr)
+	gamePORT = int(retJSON["Data"]["Port"])
+	nonce = retJSON["Data"]["Nonce"]
 	
 	# Close lobby connection, open game connection
 	# s.close()
