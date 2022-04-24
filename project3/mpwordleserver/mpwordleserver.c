@@ -35,9 +35,9 @@ bool someoneWon = false;
 bool winnerChosen = false;
 char *theWinner;
 
-struct tArgs **players;
+struct gametArgs **players;
 
-struct tArgs
+struct gametArgs
 {
     pthread_t threadClient;
     int socket;
@@ -48,6 +48,16 @@ struct tArgs
     bool iWon;
     double lastReceipt;
 };
+
+struct servertArgs
+{
+    pthread_t threadClient;
+    int socket;
+}
+
+struct servertArgs **queue;
+
+
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
@@ -220,10 +230,10 @@ void *get_in_addr(struct sockaddr *sa)
 
 void * Game_Instance(void *args)
 {
-    struct tArgs * myArgs;
-    struct tArgs threadArgs;
+    struct gametArgs * myArgs;
+    struct gametArgs threadArgs;
 
-    myArgs = (struct tArgs *) args;
+    myArgs = (struct gametArgs *) args;
     threadArgs = *myArgs;
 
     int clientFD = threadArgs.socket;
@@ -752,7 +762,7 @@ void * Game_Instance(void *args)
 
 void Game_Lobby()
 {
-    players = (struct tArgs**)(malloc(numPlayers*sizeof(struct tArgs*)));
+    players = (struct gametArgs**)(malloc(numPlayers*sizeof(struct gametArgs*)));
     int serverFD =  createSocket_TCP_Listen(NULL, gamePort);
     int nClientCount = 0;
 
@@ -780,7 +790,61 @@ void Game_Lobby()
                 s, sizeof s);
         printf("server: got connection from %s\n", s);
         nClientCount++;
-        players[nClientCount-1] = (struct tArgs*)(malloc(sizeof(struct tArgs)));
+        players[nClientCount-1] = (struct gametArgs*)(malloc(sizeof(struct gametArgs)));
+        players[nClientCount-1]->socket = clientFD;
+        players[nClientCount-1]->myNum = nClientCount;
+        printf("receiving from %d\n", players[nClientCount-1]->socket);
+
+        pthread_create(&(players[nClientCount-1]->threadClient), NULL, Game_Instance, (players[nClientCount-1]));
+    }
+
+    pthread_mutex_lock(&lock);
+    pthread_cond_broadcast(&cond);
+    pthread_mutex_unlock(&lock);
+    
+    for(i = 0; i < numPlayers; i++)
+    {
+        pthread_join(players[i]->threadClient, NULL);
+    }
+
+}
+
+void * Server_Instance(void * args)
+{
+    
+}
+
+void Server_Lobby()
+{
+    players = (struct gametArgs**)(malloc(numPlayers*sizeof(struct gametArgs*)));
+    int serverFD =  createSocket_TCP_Listen(NULL, gamePort);
+    int nClientCount = 0;
+
+    int i;
+    for(i = 0; i < numPlayers; i++)
+    {
+        struct sockaddr_storage their_addr;
+        socklen_t sin_size;
+        char s[INET6_ADDRSTRLEN];
+
+        
+        printf("Server players: waiting for connections...\n");
+        
+        sin_size = sizeof their_addr;
+        int clientFD = accept(serverFD, (struct sockaddr *)&their_addr, &sin_size);
+        printf("receiving from %d\n", clientFD);
+        if (clientFD == -1) 
+        {
+            perror("accept");
+            return;
+        }
+
+        inet_ntop(their_addr.ss_family,
+                get_in_addr((struct sockaddr *)&their_addr),
+                s, sizeof s);
+        printf("server: got connection from %s\n", s);
+        nClientCount++;
+        players[nClientCount-1] = (struct gametArgs*)(malloc(sizeof(struct gametArgs)));
         players[nClientCount-1]->socket = clientFD;
         players[nClientCount-1]->myNum = nClientCount;
         printf("receiving from %d\n", players[nClientCount-1]->socket);
