@@ -13,6 +13,7 @@
 #include <stdbool.h>
 #include <json-glib/json-glib.h>
 #include <json-glib/json-gobject.h>
+#include <sys/time.h>
 //#include "SocketHelper.h"
 
 #define MAXDATASIZE 1024
@@ -27,6 +28,29 @@ int numGuesses = 3;
 char *dictFile;
 bool debug;
 char answer [256];
+int playersWaiting = 0;
+bool answerChosen = false;
+int playersGuessed = 0;
+bool someoneWon = false;
+bool winnerChosen = false;
+char *theWinner;
+
+struct tArgs **players;
+
+struct tArgs
+{
+    pthread_t threadClient;
+    int socket;
+    int myNum;
+    char name[256];
+    char result[256];
+    int score;
+    bool iWon;
+    double lastReceipt;
+};
+
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
 void choose_answer() {
 	printf("trying to open %s\n", dictFile);
@@ -194,29 +218,18 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-void Game_Instance()
+void * Game_Instance(void *args)
 {
-    struct sockaddr_storage their_addr;
-    socklen_t sin_size;
-    char s[INET6_ADDRSTRLEN];
+    struct tArgs * myArgs;
+    struct tArgs threadArgs;
 
-    int nClientCount = 0;
-    printf("game server: waiting for connections...\n");
-    int serverFD =  createSocket_TCP_Listen(NULL, gamePort);
-    sin_size = sizeof their_addr;
-    int clientFD = accept(serverFD, (struct sockaddr *)&their_addr, &sin_size);
+    myArgs = (struct tArgs *) args;
+    threadArgs = *myArgs;
 
-    if (clientFD == -1) 
-    {
-        perror("accept");
-        return;
-    }
+    int clientFD = threadArgs.socket;
+    int myNum = threadArgs.myNum;
 
-    inet_ntop(their_addr.ss_family,
-            get_in_addr((struct sockaddr *)&their_addr),
-            s, sizeof s);
-    printf("server: got connection from %s\n", s);
-
+    printf("New player: socket: %d, number: %d\n", clientFD, myNum);
     // receive joinInstance message
     char szBuffer[BUFFER_MAX];
     int	 numBytes;
@@ -230,12 +243,7 @@ void Game_Instance()
     szBuffer[numBytes] = '\0';
     char szIdentifier[100];
 
-    nClientCount++;
-
-    sprintf(szIdentifier, "%s-%d", s, nClientCount);
-
-    // Debug / show what we got
-    printf("Received a message of %d bytes from Client %s\n", numBytes, szIdentifier);
+    printf("Received a message of %d bytes from Client\n", numBytes);
     printf("   Message: %s\n", szBuffer);
     // Do something with it
     g_autoptr(JsonParser) cmdParser = json_parser_new();
@@ -263,6 +271,10 @@ void Game_Instance()
     //TODO check that nonce is one of the approved nonces 
     int clientNonce = nonce;
     char* clientName = name;
+    strcpy((players[myNum-1]->name), clientName); 
+    printf("Player %d's name is %s\n", myNum, players[myNum-1]->name);
+    players[myNum-1]->score = 0;
+    players[myNum-1]->iWon = false;
 
     printf("%s %s %d\n", msgType, clientName, clientNonce);
 
@@ -275,7 +287,7 @@ void Game_Instance()
     json_builder_set_member_name(builder, "Name");
     json_builder_add_string_value(builder, name);
     json_builder_set_member_name(builder, "Number");
-    json_builder_add_int_value(builder, nClientCount+1);
+    json_builder_add_int_value(builder, myNum);
     json_builder_set_member_name(builder, "Result");
     json_builder_add_string_value(builder, "Yes");
     json_builder_end_object(builder);
@@ -292,12 +304,21 @@ void Game_Instance()
     send(clientFD, joinInstRes, len, 0);
     sleep(1);
 
-    int clientScore = 0;
-    int clientNum = 1;
     int currRound;
     // Synchronization point if we have more than one player
     // All players need to join
     // Fill in that code later
+
+    printf("Player %d waiting for players to join\n", myNum);
+    pthread_mutex_lock(&lock);
+    playersWaiting++;
+    pthread_cond_broadcast(&cond);
+    while(playersWaiting < numPlayers)
+    {
+        pthread_cond_wait(&cond, &lock);
+    }
+    pthread_mutex_unlock(&lock);
+
 
     //send StartGame message
     builder = json_builder_new();
@@ -311,13 +332,13 @@ void Game_Instance()
     json_builder_set_member_name(builder, "PlayerInfo");
     json_builder_begin_array(builder);
     int i;
-    for(i = 0; i < 1; i++)
+    for(i = 0; i < numPlayers; i++)
     {
         json_builder_begin_object(builder);
         json_builder_set_member_name(builder, "Name");
-        json_builder_add_string_value(builder, clientName);
+        json_builder_add_string_value(builder, players[i]->name);
         json_builder_set_member_name(builder, "Number");
-        json_builder_add_int_value(builder, clientNum);
+        json_builder_add_int_value(builder, players[i]->myNum);
         json_builder_end_object(builder);
     }
     json_builder_end_array(builder);
@@ -338,8 +359,26 @@ void Game_Instance()
 
     for(currRound = 1; currRound <= numRounds; currRound++)
     {
+        players[myNum-1]->iWon = false;
+        memset(players[myNum-1]->result, 0, 256);
         //initialize game variables
-        choose_answer();
+        if(myNum == 1)
+        {
+            choose_answer();
+            pthread_mutex_lock(&lock);
+            someoneWon = false;
+            answerChosen = true;
+            pthread_cond_broadcast(&cond);
+            pthread_mutex_unlock(&lock);
+        }
+
+        pthread_mutex_lock(&lock);
+        while(!answerChosen)
+        {
+            pthread_cond_wait(&cond, &lock);
+        }
+        pthread_mutex_unlock(&lock);
+
         //answer = "HELLO";
         int answerLen = strlen(answer);
         printf("This round's word is %s, len: %d\n", answer, answerLen);
@@ -359,15 +398,15 @@ void Game_Instance()
         json_builder_add_int_value(builder, numRounds-currRound+1);
         json_builder_set_member_name(builder, "PlayerInfo");
         json_builder_begin_array(builder);
-        for(i = 0; i < 1; i++)
+        for(i = 0; i < numPlayers; i++)
         {
             json_builder_begin_object(builder);
             json_builder_set_member_name(builder, "Name");
-            json_builder_add_string_value(builder, clientName);
+            json_builder_add_string_value(builder, players[i]->name);
             json_builder_set_member_name(builder, "Number");
-            json_builder_add_int_value(builder, clientNum);
+            json_builder_add_int_value(builder, players[i]->myNum);
             json_builder_set_member_name(builder, "Score");
-            json_builder_add_int_value(builder, clientScore);
+            json_builder_add_int_value(builder, players[i]->score);
             json_builder_end_object(builder);
         }
         json_builder_end_array(builder);
@@ -456,6 +495,11 @@ void Game_Instance()
             printf("%s guessed %s\n", clientName, guess);		
 
             //set receipt time in PlayersArr
+            struct timeval receipt;
+            gettimeofday(&receipt, NULL);
+            players[myNum-1]->lastReceipt = (receipt.tv_sec) + (receipt.tv_usec)/1000000.0;
+            printf("got guess at %lf\n", players[myNum-1]->lastReceipt);
+
 
             //send GuessResponse message
             builder = json_builder_new();
@@ -482,19 +526,35 @@ void Game_Instance()
 
             len = strlen(guessResponse);
             send(clientFD, guessResponse, len, 0);
+
             sleep(1);
-            bool someoneWon = false; //will be a global
-            bool iWon = false;
+            
             //check client's guess
             if (!strncmp(answer, guess, answerLen)) {
+                pthread_mutex_lock(&lock);
                 someoneWon = true;
-                iWon = true;
+                pthread_mutex_unlock(&lock);
+                players[myNum-1]->iWon = true;
+                players[myNum-1]->score += answerLen;
                 printf("we have a winner\n");
             }
+            check_guess_result(guess, (players[myNum-1]->result));
+
+            pthread_mutex_lock(&lock);
+            playersGuessed++;
+            pthread_cond_broadcast(&cond);
+            pthread_mutex_unlock(&lock);
 
             // Synchronization point if we have more than one player
                 // All players need to have sent a guess
                 // Fill in that code later
+            pthread_mutex_lock(&lock);
+            while(playersGuessed < numPlayers)
+            {
+                pthread_cond_wait(&cond, &lock);
+            }
+            pthread_mutex_unlock(&lock);
+            
 
             //send GuessResult
             builder = json_builder_new();
@@ -511,25 +571,23 @@ void Game_Instance()
             }
             json_builder_set_member_name(builder, "PlayerInfo");
             json_builder_begin_array(builder);
-            for(i = 0; i < 1; i++)
+            for(i = 0; i < numPlayers; i++)
             {
                 json_builder_begin_object(builder);
                 json_builder_set_member_name(builder, "Name");
-                json_builder_add_string_value(builder, clientName);
+                json_builder_add_string_value(builder, players[i]->name);
                 json_builder_set_member_name(builder, "Number");
-                json_builder_add_int_value(builder, clientNum);
+                json_builder_add_int_value(builder, players[i]->myNum);
                 json_builder_set_member_name(builder, "Correct");
-                if (iWon) {
+                if (players[i]->iWon) {
                     json_builder_add_string_value(builder, "Yes");
                 } else {
                     json_builder_add_string_value(builder, "No");
                 }
                 json_builder_set_member_name(builder, "ReceiptTime");
-                json_builder_add_string_value(builder, "TEMPTIME");
+                json_builder_add_double_value(builder, players[i]->lastReceipt);
                 json_builder_set_member_name(builder, "Result");
-                char result[answerLen];
-                check_guess_result(guess, result);
-                json_builder_add_string_value(builder, result);
+                json_builder_add_string_value(builder, players[i]->result);
                 json_builder_end_object(builder);
             }
             json_builder_end_array(builder);
@@ -547,11 +605,43 @@ void Game_Instance()
             send(clientFD, GuessResult, len, 0);
             sleep(1); 
 
+            //reset playersGuessed for new guess
+            if(myNum == 1)
+            {
+                pthread_mutex_lock(&lock);
+                playersGuessed = 0;
+                pthread_cond_broadcast(&cond);
+                pthread_mutex_unlock(&lock);
+            }
+
+            pthread_mutex_lock(&lock);
+            while(playersGuessed != 0)
+            {
+                pthread_cond_wait(&cond, &lock);
+            }
+            pthread_mutex_unlock(&lock);
+
             // Decision point – was the guess successful or are there more rounds of guessing allowed?
                 // Fill in that code later
             if(someoneWon)
                 break;
         }
+        //reset answerChosen at the end of a round
+        if(myNum == 1)
+        {
+            pthread_mutex_lock(&lock);
+            answerChosen = false;
+            pthread_cond_broadcast(&cond);
+            pthread_mutex_unlock(&lock);
+        }
+
+        pthread_mutex_lock(&lock);
+        while(answerChosen)
+        {
+            pthread_cond_wait(&cond, &lock);
+        }
+        pthread_mutex_unlock(&lock);
+
         //send EndRound
         builder = json_builder_new();
         json_builder_begin_object(builder);
@@ -563,15 +653,15 @@ void Game_Instance()
         json_builder_add_int_value(builder, numRounds-currRound+1);
         json_builder_set_member_name(builder, "PlayerInfo");
         json_builder_begin_array(builder);
-        for(i = 0; i < 1; i++)
+        for(i = 0; i < numPlayers; i++)
         {
             json_builder_begin_object(builder);
             json_builder_set_member_name(builder, "Name");
-            json_builder_add_string_value(builder, clientName);
+            json_builder_add_string_value(builder, players[i]->name);
             json_builder_set_member_name(builder, "Number");
-            json_builder_add_int_value(builder, clientNum);
+            json_builder_add_int_value(builder, players[i]->myNum);
             json_builder_set_member_name(builder, "ScoreEarned");
-            json_builder_add_int_value(builder, clientScore);
+            json_builder_add_int_value(builder, players[i]->score);
             json_builder_set_member_name(builder, "Winner");
             json_builder_add_string_value(builder, "Yes");
             json_builder_end_object(builder);
@@ -592,6 +682,33 @@ void Game_Instance()
         sleep(1); 
     }
 
+    //have player 1's thread choose the winner and let the others wait
+    if(myNum == 1)
+    {
+        pthread_mutex_lock(&lock);
+        int winnerIndex = 0;
+        int winnerScore = players[0]->score;
+        for(i = 1; i < numPlayers; i++)
+        {
+            if(players[i]->score > winnerScore)
+            {
+                winnerScore = players[i]->score;
+                winnerIndex = i;
+            }
+        }
+        theWinner = (players[winnerIndex]->name);
+        winnerChosen = true;
+        pthread_cond_broadcast(&cond);
+        pthread_mutex_unlock(&lock);
+    }
+
+    pthread_mutex_lock(&lock);
+    while(!winnerChosen)
+    {
+        pthread_cond_wait(&cond, &lock);
+    }
+    pthread_mutex_unlock(&lock);
+
     //send EndGame message
     builder = json_builder_new();
     json_builder_begin_object(builder);
@@ -600,18 +717,18 @@ void Game_Instance()
     json_builder_set_member_name(builder, "Data");
     json_builder_begin_object(builder);
     json_builder_set_member_name(builder, "WinnerName");
-    json_builder_add_string_value(builder, clientName);
+    json_builder_add_string_value(builder, theWinner);
     json_builder_set_member_name(builder, "PlayerInfo");
     json_builder_begin_array(builder);
-    for(i = 0; i < 1; i++)
+    for(i = 0; i < numPlayers; i++)
     {
         json_builder_begin_object(builder);
         json_builder_set_member_name(builder, "Name");
-        json_builder_add_string_value(builder, clientName);
+        json_builder_add_string_value(builder, players[i]->name);
         json_builder_set_member_name(builder, "Number");
-        json_builder_add_int_value(builder, clientNum);
-        json_builder_set_member_name(builder, "Score");
-        json_builder_add_int_value(builder, clientScore);
+        json_builder_add_int_value(builder, players[i]->myNum);
+        json_builder_set_member_name(builder, "ScoreEarned");
+        json_builder_add_int_value(builder, players[i]->score);
         json_builder_end_object(builder);
     }
     json_builder_end_array(builder);
@@ -629,6 +746,57 @@ void Game_Instance()
     send(clientFD, EndGame, len, 0);
 
     sleep(5);
+
+    return NULL;
+}
+
+void Game_Lobby()
+{
+    players = (struct tArgs**)(malloc(numPlayers*sizeof(struct tArgs*)));
+    int serverFD =  createSocket_TCP_Listen(NULL, gamePort);
+    int nClientCount = 0;
+
+    int i;
+    for(i = 0; i < numPlayers; i++)
+    {
+        struct sockaddr_storage their_addr;
+        socklen_t sin_size;
+        char s[INET6_ADDRSTRLEN];
+
+        
+        printf("game server: waiting for connections...\n");
+        
+        sin_size = sizeof their_addr;
+        int clientFD = accept(serverFD, (struct sockaddr *)&their_addr, &sin_size);
+        printf("receiving from %d\n", clientFD);
+        if (clientFD == -1) 
+        {
+            perror("accept");
+            return;
+        }
+
+        inet_ntop(their_addr.ss_family,
+                get_in_addr((struct sockaddr *)&their_addr),
+                s, sizeof s);
+        printf("server: got connection from %s\n", s);
+        nClientCount++;
+        players[nClientCount-1] = (struct tArgs*)(malloc(sizeof(struct tArgs)));
+        players[nClientCount-1]->socket = clientFD;
+        players[nClientCount-1]->myNum = nClientCount;
+        printf("receiving from %d\n", players[nClientCount-1]->socket);
+
+        pthread_create(&(players[nClientCount-1]->threadClient), NULL, Game_Instance, (players[nClientCount-1]));
+    }
+
+    pthread_mutex_lock(&lock);
+    pthread_cond_broadcast(&cond);
+    pthread_mutex_unlock(&lock);
+    
+    for(i = 0; i < numPlayers; i++)
+    {
+        pthread_join(players[i]->threadClient, NULL);
+    }
+
 }
 
 int main(int argc, char *argv[])
@@ -692,7 +860,7 @@ int main(int argc, char *argv[])
     printf("Dictionary: %s\n", dictFile);
     printf("Should debug: %s\n", (debug) ? "True" : "False");
 	
-	Game_Instance();
+	Game_Lobby();
 	
 	printf("And we are done\n");
 
