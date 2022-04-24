@@ -130,18 +130,30 @@ def main():
 			winner = retJSON['Data']['Winner']
 			result = retJSON['Data']['PlayerInfo'][0]['Result']
 			print(result)
-			i = 0
-			for letter in result:
-				if letter == 'G':
-					print("\033[92m" + guess[i] + "\033[0m", end='')
-				elif letter == 'Y':
-					print("\033[93m" + guess[i] + "\033[0m", end='')
-				elif letter == 'B':
-					print(guess[i], end='')
-				i = i + 1
-			print()
-			# Check if anyone won or if that was the last round
+			for result in retJSON['Data']['PlayerInfo']:
+				print("result: ", result['Result'])
+				i = 0
+				print(result['Name'], ":", end='')
+				for letter in result['Result']:
+					if letter == 'G':
+						if result['Name'] == playerName:
+							print("\033[92m" + guess[i] + "\033[0m", end='')
+						else:
+							print("\033[92m" + "X" + "\033[0m", end='')
+					elif letter == 'Y':
+						if result['Name'] == playerName: 
+							print("\033[93m" + guess[i] + "\033[0m", end='')
+						else:
+							print("\033[93m" + "X" + "\033[0m", end='')
+					elif letter == 'B':
+						if result['Name'] == playerName:
+							print(guess[i], end='')
+						else:
+							print("X", end='');
+					i = i + 1
+				print()
 			
+			# Check if anyone won or if that was the last round
 			if winner == 'Yes':
 				print("Someone guessed right! Round is over!")
 			
