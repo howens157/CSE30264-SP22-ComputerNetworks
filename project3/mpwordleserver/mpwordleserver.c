@@ -22,7 +22,7 @@
 
 int numPlayers; //change to 2
 char *lobPort;
-char *gamePort;
+int gamePort;
 int numRounds;
 int numGuesses = 3;
 char *dictFile;
@@ -53,10 +53,19 @@ struct servertArgs
 {
     pthread_t threadClient;
     int socket;
-}
+    int number;
+    int nextPort;
+};
 
+int queueWaiting = 0;
 struct servertArgs **queue;
 
+struct secStruct {
+    char *name;
+    int nonce;
+};
+
+struct secStruct **nonces;
 
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
@@ -251,7 +260,6 @@ void * Game_Instance(void *args)
     }
 
     szBuffer[numBytes] = '\0';
-    char szIdentifier[100];
 
     printf("Received a message of %d bytes from Client\n", numBytes);
     printf("   Message: %s\n", szBuffer);
@@ -271,7 +279,7 @@ void * Game_Instance(void *args)
     json_reader_end_member(cmdReader);
     json_reader_read_member(cmdReader, "Data");
     json_reader_read_member(cmdReader, "Name");
-    char* name = (char*)json_reader_get_string_value(cmdReader);
+    char* clientName = (char*)json_reader_get_string_value(cmdReader);
     json_reader_end_member(cmdReader);
     json_reader_read_member(cmdReader, "Nonce");
     int nonce = (int)json_reader_get_int_value(cmdReader);
@@ -280,7 +288,21 @@ void * Game_Instance(void *args)
     
     //TODO check that nonce is one of the approved nonces 
     int clientNonce = nonce;
-    char* clientName = name;
+    bool playerApproved = false;
+    int i;
+    for(i = 0; i < numPlayers; i++)
+    {
+        if(nonces[i]->nonce == clientNonce && strcmp(clientName, nonces[i]->name))
+        {
+            playerApproved = true;
+        }
+    }
+
+    if(!playerApproved)
+    {
+        return NULL; //TODO: change lobby to be a while loop
+    }
+
     strcpy((players[myNum-1]->name), clientName); 
     printf("Player %d's name is %s\n", myNum, players[myNum-1]->name);
     players[myNum-1]->score = 0;
@@ -295,7 +317,7 @@ void * Game_Instance(void *args)
     json_builder_set_member_name(builder, "Data");
     json_builder_begin_object(builder);
     json_builder_set_member_name(builder, "Name");
-    json_builder_add_string_value(builder, name);
+    json_builder_add_string_value(builder, clientName);
     json_builder_set_member_name(builder, "Number");
     json_builder_add_int_value(builder, myNum);
     json_builder_set_member_name(builder, "Result");
@@ -341,7 +363,7 @@ void * Game_Instance(void *args)
     json_builder_add_int_value(builder, numRounds);
     json_builder_set_member_name(builder, "PlayerInfo");
     json_builder_begin_array(builder);
-    int i;
+
     for(i = 0; i < numPlayers; i++)
     {
         json_builder_begin_object(builder);
@@ -476,7 +498,7 @@ void * Game_Instance(void *args)
             szBuffer[numBytes] = '\0';
 
             // Debug / show what we got
-            printf("Received a message of %d bytes from Client %s\n", numBytes, szIdentifier);
+            printf("Received a message of %d bytes from Client\n", numBytes);
             printf("   Message: %s\n", szBuffer);
             // Do something with it
             g_autoptr(JsonParser) cmdParser = json_parser_new();
@@ -760,10 +782,12 @@ void * Game_Instance(void *args)
     return NULL;
 }
 
-void Game_Lobby()
+void Game_Lobby(int portNum)
 {
     players = (struct gametArgs**)(malloc(numPlayers*sizeof(struct gametArgs*)));
-    int serverFD =  createSocket_TCP_Listen(NULL, gamePort);
+    char myPort[100];
+    sprintf(myPort, "%d", portNum);
+    int serverFD =  createSocket_TCP_Listen(NULL, myPort);
     int nClientCount = 0;
 
     int i;
@@ -811,55 +835,201 @@ void Game_Lobby()
 
 void * Server_Instance(void * args)
 {
+    struct servertArgs * myArgs;
+    struct servertArgs threadArgs;
+
+    myArgs = (struct servertArgs *) args;
+    threadArgs = *myArgs;
+
+    int clientFD = threadArgs.socket;
+    int myNum = threadArgs.number;
+    char nextPort[100];
+    sprintf(nextPort, "%d", threadArgs.nextPort);
+
+    printf("new player waiting for game on port %s\n", nextPort);
+
+    printf("New waiting: socket: %d\n", clientFD);
+    // receive join message
+    char szBuffer[BUFFER_MAX];
+    int	 numBytes;
+
+    printf("Receiving from %d\n", clientFD);
+    if ((numBytes = recv(clientFD, szBuffer, MAXDATASIZE-1, 0)) == -1) {
+        perror("recv");
+        exit(1);
+    }
+
+    szBuffer[numBytes] = '\0';
+
+    printf("Received a message of %d bytes from Client\n", numBytes);
+    printf("   Message: %s\n", szBuffer);
+    // Do something with it
+    g_autoptr(JsonParser) cmdParser = json_parser_new();
+    g_autoptr(GError) error = NULL;
+    json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
+    if(error != NULL)
+    {
+        g_critical("Unable to parse command: %s", error->message);
+        exit(1);
+    }
+    g_autoptr(JsonNode) cmdRoot = json_parser_get_root(cmdParser);
+    g_autoptr(JsonReader) cmdReader = json_reader_new(cmdRoot);
+    json_reader_read_member(cmdReader, "MessageType");
+    const char* msgType = json_reader_get_string_value(cmdReader);
+    json_reader_end_member(cmdReader);
+    json_reader_read_member(cmdReader, "Data");
+    json_reader_read_member(cmdReader, "Name");
+    char* name = (char*)json_reader_get_string_value(cmdReader);
+    json_reader_end_member(cmdReader);
+    json_reader_read_member(cmdReader, "Client");
+    char* clientID = (char *)json_reader_get_string_value(cmdReader);
+    json_reader_end_member(cmdReader);
+    json_reader_end_member(cmdReader);	
+
     
+
+    printf("%s: player: %s from %s waiting\n", msgType, name, clientID);	
+
+    //send joinresult
+    g_autoptr(JsonBuilder) builder = json_builder_new();
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "MessageType");
+    json_builder_add_string_value(builder, "JoinResult");
+    json_builder_set_member_name(builder, "Data");
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "Name");
+    json_builder_add_string_value(builder, name);
+    json_builder_set_member_name(builder, "Result");
+    json_builder_add_string_value(builder, "Yes");
+    json_builder_end_object(builder);
+    json_builder_end_object(builder);
+
+    g_autoptr(JsonNode) root = json_builder_get_root(builder);
+    g_autoptr(JsonGenerator) g = json_generator_new();
+    json_generator_set_root(g, root);
+    const char *joinRes = json_generator_to_data(g, NULL);
+
+    printf("%s\n", joinRes);
+
+    uint16_t len = strlen(joinRes);
+    send(clientFD, joinRes, len, 0);
+    sleep(1);
+
+    //wait for the lobby to be full
+    printf("Player %s waiting for players to join\n", name);
+    pthread_mutex_lock(&lock);
+    queueWaiting++;
+    pthread_cond_broadcast(&cond);
+    while(queueWaiting < numPlayers)
+    {
+        pthread_cond_wait(&cond, &lock);
+    }
+    pthread_mutex_unlock(&lock);
+
+    printf("starting new game\n");
+    int nonce = rand() % 1000000;
+    nonces[myNum-1] = (struct secStruct*)(malloc(sizeof(struct secStruct)));
+    nonces[myNum-1]->name = name;
+    nonces[myNum-1]->nonce = nonce;
+
+    //send startInstance
+    builder = json_builder_new();
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "MessageType");
+    json_builder_add_string_value(builder, "StartInstance");
+    json_builder_set_member_name(builder, "Data");
+    json_builder_begin_object(builder);
+    json_builder_set_member_name(builder, "Server");
+    json_builder_add_string_value(builder, "127.0.0.1");
+    json_builder_set_member_name(builder, "Port");
+    json_builder_add_string_value(builder, nextPort);
+    json_builder_set_member_name(builder, "Nonce");
+    json_builder_add_int_value(builder, nonce);
+    json_builder_end_object(builder);
+    json_builder_end_object(builder);
+
+    root = json_builder_get_root(builder);
+    g = json_generator_new();
+    json_generator_set_root(g, root);
+    const char *startInstance = json_generator_to_data(g, NULL);
+
+    printf("%s\n", startInstance);
+
+    len = strlen(startInstance);
+    send(clientFD, startInstance, len, 0);
+    sleep(1);
+    return NULL;
 }
 
 void Server_Lobby()
 {
-    players = (struct gametArgs**)(malloc(numPlayers*sizeof(struct gametArgs*)));
-    int serverFD =  createSocket_TCP_Listen(NULL, gamePort);
-    int nClientCount = 0;
-
-    int i;
-    for(i = 0; i < numPlayers; i++)
+    
+    int serverFD =  createSocket_TCP_Listen(NULL, lobPort);
+    while(1)
     {
-        struct sockaddr_storage their_addr;
-        socklen_t sin_size;
-        char s[INET6_ADDRSTRLEN];
-
-        
-        printf("Server players: waiting for connections...\n");
-        
-        sin_size = sizeof their_addr;
-        int clientFD = accept(serverFD, (struct sockaddr *)&their_addr, &sin_size);
-        printf("receiving from %d\n", clientFD);
-        if (clientFD == -1) 
+        queue = (struct servertArgs**)(malloc(numPlayers*sizeof(struct servertArgs*)));
+        int nClientCount = 0;
+        nonces = (struct secStruct**)(malloc(numPlayers*sizeof(struct secStruct*)));
+        int i;
+        for(i = 0; i < numPlayers; i++)
         {
-            perror("accept");
+            struct sockaddr_storage their_addr;
+            socklen_t sin_size;
+            char s[INET6_ADDRSTRLEN];
+            
+            printf("Server lobby: waiting for connections...\n");
+            
+            sin_size = sizeof their_addr;
+            int clientFD = accept(serverFD, (struct sockaddr *)&their_addr, &sin_size);
+            printf("receiving from %d\n", clientFD);
+            if (clientFD == -1) 
+            {
+                perror("accept");
+                return;
+            }
+
+            inet_ntop(their_addr.ss_family,
+                    get_in_addr((struct sockaddr *)&their_addr),
+                    s, sizeof s);
+            printf("server: got connection from %s\n", s);
+            nClientCount++;
+            queue[nClientCount-1] = (struct servertArgs*)(malloc(sizeof(struct servertArgs)));
+            queue[nClientCount-1]->socket = clientFD;
+            queue[nClientCount-1]->number = nClientCount;
+            queue[nClientCount-1]->nextPort = gamePort;
+            printf("receiving from %d\n", queue[nClientCount-1]->socket);
+
+            pthread_create(&(queue[nClientCount-1]->threadClient), NULL, Server_Instance, (queue[nClientCount-1]));
+        }
+
+        pthread_mutex_lock(&lock);
+        pthread_cond_broadcast(&cond);
+        pthread_mutex_unlock(&lock);
+        
+        for(i = 0; i < numPlayers; i++)
+        {
+            pthread_join(queue[i]->threadClient, NULL);
+        }
+
+        int cpid = fork();
+
+        if(cpid == 0)
+        {
+            Game_Lobby(gamePort);
             return;
         }
 
-        inet_ntop(their_addr.ss_family,
-                get_in_addr((struct sockaddr *)&their_addr),
-                s, sizeof s);
-        printf("server: got connection from %s\n", s);
-        nClientCount++;
-        players[nClientCount-1] = (struct gametArgs*)(malloc(sizeof(struct gametArgs)));
-        players[nClientCount-1]->socket = clientFD;
-        players[nClientCount-1]->myNum = nClientCount;
-        printf("receiving from %d\n", players[nClientCount-1]->socket);
-
-        pthread_create(&(players[nClientCount-1]->threadClient), NULL, Game_Instance, (players[nClientCount-1]));
+        for(i = 0; i < numPlayers; i++)
+        {
+            free(nonces[i]);
+            free(queue[i]);
+        }
+        free(nonces);
+        free(queue);
+        queueWaiting = 0;
+        gamePort++;
     }
 
-    pthread_mutex_lock(&lock);
-    pthread_cond_broadcast(&cond);
-    pthread_mutex_unlock(&lock);
-    
-    for(i = 0; i < numPlayers; i++)
-    {
-        pthread_join(players[i]->threadClient, NULL);
-    }
 
 }
 
@@ -872,7 +1042,7 @@ int main(int argc, char *argv[])
 
     numPlayers = 1; //change to 2
     lobPort = "41100";
-    gamePort = "41101";
+    gamePort = 41101;
     numRounds = 1;
     dictFile = "mpwordleserver/defaultDict.txt";
     debug = false;
@@ -898,7 +1068,7 @@ int main(int argc, char *argv[])
         }
         else if(strcmp(argv[i], "-pp") == 0)
         {
-            gamePort = argv[i+1];
+            gamePort = atoi(argv[i+1]);
             i++;
         }
         else if(strcmp(argv[i], "-nr") == 0)
@@ -919,12 +1089,12 @@ int main(int argc, char *argv[])
 
     printf("Number of players: %d\n", numPlayers);
     printf("Lobby Port: %s\n", lobPort);
-    printf("Game Port: %s\n", gamePort);
+    printf("Game Port: %d\n", gamePort);
     printf("Number of rounds: %d\n", numRounds);
     printf("Dictionary: %s\n", dictFile);
     printf("Should debug: %s\n", (debug) ? "True" : "False");
 	
-	Game_Lobby();
+	Server_Lobby();
 	
 	printf("And we are done\n");
 
