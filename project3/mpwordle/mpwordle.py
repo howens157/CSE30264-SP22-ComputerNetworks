@@ -16,6 +16,7 @@ import json
 import sys
 import struct
 import time
+import re
 
 def error():
 	print('Usage: ./mpwordle -name X -server X -port X')
@@ -153,14 +154,31 @@ def main():
 			s.sendall(cmdStr.encode())
 
 			# Get GuessResponse from server, handle chat
+			receivedResponse = False
 			while True:
+				if receivedResponse:
+					break
 				retJSONstr = s.recv(1024).decode()
 				print(f'received message from server: {retJSONstr}\n')
-				retJSON = json.loads(retJSONstr)
-				if retJSON["MessageType"] == "Chat":
-					print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
-				else:
-					break
+				try:
+					retJSON = json.loads(jsonStr)
+					print(retJSON)
+					if retJSON["MessageType"] == "Chat":
+						print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
+					else:
+						break
+				except:
+					# Handle the case in which multiple messages are sent
+					chatList = re.split('({[^}]*})', retJSONstr)
+					for jsonStr in chatList:
+						if not len(jsonStr) > 1:
+							continue
+						retJSON = json.loads(jsonStr + "}")
+						if retJSON["MessageType"] == "Chat":
+							print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
+						else:
+							receivedResponse = True
+						
 			
 			# Get GuessResult from server, handle chat
 			retJSONstr = s.recv(1024).decode()
