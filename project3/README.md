@@ -9,10 +9,14 @@ The client was written in python and connects to the server and allows users to 
 ## How to Invoke
 The server and client must both be invoked from the project3 directory, not from within the mpwordleserver and mpwordle subdirectories,
 respectively. 
+<br><br>
+		client:
 <br>
 		./mywordle/mpwordle.py -name X -server X -port X
 <br>
 		where name is the player's name and server and port are where the client should connect to the server
+<br><br>
+		server:
 <br>
 		./mpwordleserver/mpwordleserver -np X -lp X -pp X -nr X -d DFile -dbg
 <br>
