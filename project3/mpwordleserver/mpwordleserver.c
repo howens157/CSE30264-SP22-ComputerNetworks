@@ -44,7 +44,7 @@ struct gametArgs
     int myNum;
     char name[256];
     char result[256];
-    int score;
+    double score;
     bool iWon;
     double lastReceipt;
 };
@@ -335,7 +335,7 @@ void * Game_Instance(void *args)
 
     strcpy((players[myNum-1]->name), clientName); 
     printf("Player %d's name is %s\n", myNum, players[myNum-1]->name);
-    players[myNum-1]->score = 0;
+    players[myNum-1]->score = 0.0;
     players[myNum-1]->iWon = false;
 
     printf("%s %s %d\n", msgType, clientName, clientNonce);
@@ -468,7 +468,7 @@ void * Game_Instance(void *args)
             json_builder_set_member_name(builder, "Number");
             json_builder_add_int_value(builder, players[i]->myNum);
             json_builder_set_member_name(builder, "Score");
-            json_builder_add_int_value(builder, players[i]->score);
+            json_builder_add_double_value(builder, players[i]->score);
             json_builder_end_object(builder);
         }
         json_builder_end_array(builder);
@@ -618,7 +618,7 @@ void * Game_Instance(void *args)
                 someoneWon = true;
                 pthread_mutex_unlock(&lock);
                 players[myNum-1]->iWon = true;
-                players[myNum-1]->score += answerLen;
+                players[myNum-1]->score += 20.0*answerLen/((double)(currGuess));
                 printf("we have a winner\n");
             }
             check_guess_result(guess, (players[myNum-1]->result));
@@ -707,7 +707,19 @@ void * Game_Instance(void *args)
             // Decision point – was the guess successful or are there more rounds of guessing allowed?
                 // Fill in that code later
             if(someoneWon)
+            {
+                if(players[myNum-1]->iWon == false)
+                {
+                    int numLettersRight = 0;
+                    for(i = 0; i < answerLen; i++)
+                    {
+                        if(players[myNum-1]->result[i] == 'G')
+                            numLettersRight++;
+                    }
+                    players[myNum-1]->score += numLettersRight*10.0/((double)(currGuess));
+                }
                 break;
+            }
         }
         //reset answerChosen at the end of a round
         if(myNum == 1)
@@ -746,7 +758,10 @@ void * Game_Instance(void *args)
             json_builder_set_member_name(builder, "ScoreEarned");
             json_builder_add_int_value(builder, players[i]->score);
             json_builder_set_member_name(builder, "Winner");
-            json_builder_add_string_value(builder, "Yes");
+            if(players[i]->iWon)
+                json_builder_add_string_value(builder, "Yes");
+            else
+                json_builder_add_string_value(builder, "No");
             json_builder_end_object(builder);
         }
         json_builder_end_array(builder);
