@@ -22,6 +22,8 @@ def error():
 	exit(1)
 
 def main():
+	playerStats = {}
+
 	# Parse command line arguments
 	argc = len(sys.argv)
 	argv = sys.argv
@@ -99,8 +101,14 @@ def main():
 		else:
 			gameRounds = int(retJSON["Data"]["Rounds"])
 			break
+	players = retJSON["Data"]["PlayerInfo"]
+	for player in players:
+		playerStats[player['Name']] = [] 
 
 	for rnd in range(gameRounds):
+		for player in playerStats:
+			playerStats[player].append('TEMPRESULT')
+
 		# Wait to receive StartRound, handle chat
 		while True:
 			retJSONstr = s.recv(1024).decode()
@@ -170,9 +178,10 @@ def main():
 				print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
 			else:
 				winner = retJSON['Data']['Winner']
-				result = retJSON['Data']['PlayerInfo'][0]['Result']
-				print(result)
+				#result = retJSON['Data']['PlayerInfo'][0]['Result']
+				#print(result)
 				for result in retJSON['Data']['PlayerInfo']:
+					playerStats[result['Name']][rnd] = result['Result']
 					print("result: ", result['Result'])
 					i = 0
 					print(result['Name'], ":", end='')
@@ -227,6 +236,7 @@ def main():
 			print("Game is over")
 			break
 
+	print(playerStats)
 	
 if __name__ == '__main__':
 	main()
