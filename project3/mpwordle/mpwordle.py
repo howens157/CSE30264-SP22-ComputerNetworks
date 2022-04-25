@@ -51,26 +51,25 @@ def main():
 	cmdJSON["MessageType"] = "Join"
 	cmdJSON["Data"] = {"Name":playerName, "Client":"OwensKorbelGriffith-Python"}
 	cmdStr = json.dumps(cmdJSON)
-	print(f'sending join to server: {cmdStr}\n')
+	print('Joining Lobby...')
 	s.sendall(bytes(cmdStr, encoding ="utf-8"))
 
 	# Receive JoinResult from server
 	retJSONstr = s.recv(1024).decode()
-	print(f'received join response: {retJSONstr}\n')
-	retJSON = json.loads(retJSONstr)
+	print('Lobby joined...')
 
 
 	# Receive StartInstance from server, get new port
 	retJSONstr = s.recv(1024).decode()
-	print(f'received StartInstance: {retJSONstr}')
 	retJSON = json.loads(retJSONstr)
 	gamePORT = int(retJSON["Data"]["Port"])
+	server = retJSON["Data"]["Server"]
 	nonce = retJSON["Data"]["Nonce"]
+	print(f'Joining game at port {gamePORT} on {server}...')
 	
-	time.sleep(3)
+	time.sleep(2)
 
 	# Close lobby connection, open game connection
-	# s.close()
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	s.connect((HOST, gamePORT))
 
@@ -79,62 +78,49 @@ def main():
 	cmdJSON["MessageType"] = "JoinInstance"
 	cmdJSON["Data"] = {"Name":playerName, "Nonce":nonce}
 	cmdStr = json.dumps(cmdJSON)
-	print(f'sending JoinInstance to server: {cmdStr}\n')
 	s.sendall(cmdStr.encode())
 
 	# Receive JoinInstanceResult from server
 	retJSONstr = s.recv(1024).decode()
-	print(f'received JoinInstanceResult: {retJSONstr}\n')
 	retJSON = json.loads(retJSONstr)
 	myNum = int(retJSON["Data"]["Number"])
 	result = (retJSON["Data"]["Result"])
 	if result == 'No':
 		print('Bad nonce received, exiting')
 		exit(1)
+	print('Game server joined...')
 
-	# Receive StartGame from server, handle chat
-	while True:
-		retJSONstr = s.recv(1024).decode()
-		print(f'received message from server: {retJSONstr}\n')
-		retJSON = json.loads(retJSONstr)
-		if retJSON["MessageType"] == "Chat":
-			print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
-		else:
-			gameRounds = int(retJSON["Data"]["Rounds"])
-			break
+	# Receive StartGame from server
+	
+	retJSONstr = s.recv(1024).decode()
+	retJSON = json.loads(retJSONstr)
+	gameRounds = int(retJSON["Data"]["Rounds"])
+	print('\nWelcome to Multiplayer Wordle!')
+	print(f'There will be {gameRounds} rounds.')
+			
 	players = retJSON["Data"]["PlayerInfo"]
 	for player in players:
 		playerStats[player['Name']] = [] 
 
 	for rnd in range(gameRounds):
+		print(f'ROUND {rnd+1}:\n----------')
+
 		for player in playerStats:
 			playerStats[player].append('TEMPRESULT')
 
-		# Wait to receive StartRound, handle chat
-		while True:
-			retJSONstr = s.recv(1024).decode()
-			print(f'received message from server: {retJSONstr}\n')
-			retJSON = json.loads(retJSONstr)
-			if retJSON["MessageType"] == "Chat":
-				print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
-			else:
-				wordLen = retJSON["Data"]["WordLength"]
-				print("Current word is " + str(wordLen) + " letters long")
-				retJSON = json.loads(retJSONstr)
-				roundsRemaining = int(retJSON["Data"]["RoundsRemaining"])
-				break
+		# Wait to receive StartRound
+		retJSONstr = s.recv(1024).decode()
+		retJSON = json.loads(retJSONstr)
+		wordLen = retJSON["Data"]["WordLength"]
+		print("Current word is " + str(wordLen) + " letters long")
+		retJSON = json.loads(retJSONstr)
+		roundsRemaining = int(retJSON["Data"]["RoundsRemaining"])
 
 		# Receive server PromptForGuess, handle chat
-		while True:
-			retJSONstr = s.recv(1024).decode()
-			print(f'received message from server: {retJSONstr}\n')
-			retJSON = json.loads(retJSONstr)
-			if retJSON["MessageType"] == "Chat":
-				print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
-			else:
-				break
+		retJSONstr = s.recv(1024).decode()
+		retJSON = json.loads(retJSONstr)
 
-		# Loop until 
+		# Loop until someone gets it right or the server sends an EndRound
 		while True:
 			# Get user input for guess
 			while True:
@@ -145,20 +131,17 @@ def main():
 					cmdJSON["MessageType"] = "Chat"
 					cmdJSON["Data"] = {"Name":playerName, "Text":str(guess[1:])}
 					cmdStr = json.dumps(cmdJSON)
-					print(f'sending Guess to server: {cmdStr}\n')
 					s.sendall(cmdStr.encode())
 				else:
-					if len(guess) == wordLen:
+					if len(guess) == wordLen and guess.isalpha():
 						break
 					else:
 						print("Input is incorrect length, word is " + str(wordLen) + " characters")
 					
-
 			cmdJSON = {}
 			cmdJSON["MessageType"] = "Guess"
-			cmdJSON["Data"] = {"Name":playerName, "Guess":str(guess)}
+			cmdJSON["Data"] = {"Name":playerName, "Guess":str(guess).upper()}
 			cmdStr = json.dumps(cmdJSON)
-			print(f'sending Guess to server: {cmdStr}\n')
 			s.sendall(cmdStr.encode())
 
 			# Get GuessResponse from server, handle chat
@@ -167,94 +150,93 @@ def main():
 				if receivedResponse:
 					break
 				retJSONstr = s.recv(1024).decode()
-				print(f'received message from server: {retJSONstr}\n')
 				try:
-					retJSON = json.loads(jsonStr)
-					print(retJSON)
+					retJSON = json.loads(retJSONstr)
 					if retJSON["MessageType"] == "Chat":
-						print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
+						print('2Message Board:')
+						print(f'\t{retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}')
 					else:
 						break
 				except:
 					# Handle the case in which multiple messages are sent
 					chatList = re.split('({[^}]*})', retJSONstr)
+					print('Message Board:')
 					for jsonStr in chatList:
 						if not len(jsonStr) > 1:
 							continue
 						retJSON = json.loads(jsonStr + "}")
 						if retJSON["MessageType"] == "Chat":
-							print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
+							print(f'\t{retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}')
 						else:
 							receivedResponse = True
-						
-			
+
 			# Get GuessResult from server, handle chat
-			retJSONstr = s.recv(1024).decode()
-			print(f'received GuessResult: {retJSONstr}\n')	
+			retJSONstr = s.recv(1024).decode()	
 			retJSON = json.loads(retJSONstr)
-			if retJSON["MessageType"] == "Chat":
-				print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
-			else:
-				winner = retJSON['Data']['Winner']
-				#result = retJSON['Data']['PlayerInfo'][0]['Result']
-				#print(result)
-				for result in retJSON['Data']['PlayerInfo']:
-					playerStats[result['Name']][rnd] = result['Result']
-					print("result: ", result['Result'])
-					i = 0
-					print(result['Name'], ":", end='')
-					for letter in result['Result']:
-						if letter == 'G':
-							if result['Name'] == playerName:
-								print("\033[92m" + guess[i] + "\033[0m", end='')
-							else:
-								print("\033[92m" + "X" + "\033[0m", end='')
-						elif letter == 'Y':
-							if result['Name'] == playerName: 
-								print("\033[93m" + guess[i] + "\033[0m", end='')
-							else:
-								print("\033[93m" + "X" + "\033[0m", end='')
-						elif letter == 'B':
-							if result['Name'] == playerName:
-								print(guess[i], end='')
-							else:
-								print("X", end='')
-						i = i + 1
-					print()
+			winner = retJSON['Data']['Winner']
+			print("Guesses of this round:")
+			for result in retJSON['Data']['PlayerInfo']:
+				playerStats[result['Name']][rnd] = result['Result']
+				i = 0
+				print(f'\t{result["Name"]}: ', end='')
+				for letter in result['Result']:
+					if letter == 'G':
+						if result['Name'] == playerName:
+							print("\033[92m" + guess[i].upper() + "\033[0m", end='')
+						else:
+							print("\033[92m" + "X" + "\033[0m", end='')
+					elif letter == 'Y':
+						if result['Name'] == playerName: 
+							print("\033[93m" + guess[i].upper() + "\033[0m", end='')
+						else:
+							print("\033[93m" + "X" + "\033[0m", end='')
+					elif letter == 'B':
+						if result['Name'] == playerName:
+							print(guess[i].upper(), end='')
+						else:
+							print("X", end='')
+					i = i + 1
+				print()
 			
 			# Check if anyone won or if that was the last round
 			if winner == 'Yes':
 				print("Someone guessed right! Round is over!")
-			
-			receivedEndRound = False
+	
 			#receive endRound or next promptGuess, handle chat
-			while True:
-				retJSONstr = s.recv(1024).decode()
-				retJSON = json.loads(retJSONstr)
-				if retJSON['MessageType'] == 'EndRound':
-					print(f'received EndRound: {retJSONstr}\n')	
-					receivedEndRound = True
-					break
-				elif retJSON["MessageType"] == "Chat":
-					print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
-				else:
-					print(f'received PromptForGuess: {retJSONstr}\n')
-					break
-			if receivedEndRound:
+			retJSONstr = s.recv(1024).decode()
+			retJSON = json.loads(retJSONstr)
+			if retJSON['MessageType'] == 'EndRound':
+				print(f'That\'s the end of round {rnd+1}!')
+				print(f'Scoreboard after {rnd+1} rounds:')
+				playerInfo = retJSON['Data']['PlayerInfo']
+				for player in playerInfo:
+					print(f'\t{player["Name"]}:\tScore: {player["ScoreEarned"]}', end='')
+					if player['Winner'] == 'Yes':
+						print('\tWINNER!', end='')
+					print()
 				break
+			else:
+				print('No one got it right! Guess again!')
 
 	#receive endGame, handle chat
-	while True:
-		retJSONstr = s.recv(1024).decode()
-		print(f'received message from server: {retJSONstr}\n')
-		retJSON = json.loads(retJSONstr)
-		if retJSON["MessageType"] == "Chat":
-			print(f'chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}\n')
-		else:
-			print("Game is over")
-			break
+	retJSONstr = s.recv(1024).decode()
+	retJSON = json.loads(retJSONstr)
+	print("Game is over!")
+	print(f'Final Scoreboard:')
+	playerInfo = retJSON['Data']['PlayerInfo']
+	for player in playerInfo:
+		print(f'\t{player["Name"]}:\tScore: {player["ScoreEarned"]}')
+	print(f'\n{retJSON["Data"]["WinnerName"]} is your winner! Congratulations!')
 
-	print(playerStats)
+	print("\nGame Statistics:")
+	for player, results in playerStats.items():
+		lettersRight = 0
+		totalLetters = 0
+		for result in results:
+			lettersRight += result.count('G')
+			totalLetters += len(result)
+		print(f'\t{player}: {lettersRight} out of {totalLetters} right. Avg Accuracy: {lettersRight/totalLetters*100}%')
+		
 	
 if __name__ == '__main__':
 	main()
