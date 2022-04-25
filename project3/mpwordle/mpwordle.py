@@ -84,6 +84,10 @@ def main():
 	print(f'received JoinInstanceResult: {retJSONstr}\n')
 	retJSON = json.loads(retJSONstr)
 	myNum = int(retJSON["Data"]["Number"])
+	result = (retJSON["Data"]["Result"])
+	if result == 'No':
+		print('Bad nonce received, exiting')
+		exit(1)
 
 	# Receive StartGame from server, handle chat
 	while True:
@@ -125,11 +129,21 @@ def main():
 		while True:
 			# Get user input for guess
 			while True:
-				guess = input("Input your guess: ")
-				if len(guess) == wordLen:
-					break
+				print("Start your message with a $ to chat")
+				guess = input("Input your guess or chat: ")
+				if guess[0] == '$':
+					cmdJSON = {}
+					cmdJSON["MessageType"] = "Chat"
+					cmdJSON["Data"] = {"Name":playerName, "Text":str(guess[1:])}
+					cmdStr = json.dumps(cmdJSON)
+					print(f'sending Guess to server: {cmdStr}\n')
+					s.sendall(cmdStr.encode())
 				else:
-					print("Input is incorrect length, word is " + str(wordLen) + " characters")
+					if len(guess) == wordLen:
+						break
+					else:
+						print("Input is incorrect length, word is " + str(wordLen) + " characters")
+					
 
 			cmdJSON = {}
 			cmdJSON["MessageType"] = "Guess"
@@ -177,7 +191,7 @@ def main():
 							if result['Name'] == playerName:
 								print(guess[i], end='')
 							else:
-								print("X", end='');
+								print("X", end='')
 						i = i + 1
 					print()
 			

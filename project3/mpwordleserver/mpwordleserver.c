@@ -147,11 +147,6 @@ void check_guess_result(char* guess, char *result) {
 	return;
 }
 
-/*int createSocket_TCP_Listen (char * pszServer, char * pszPort)
-{
-    return createSocket_TCP_Listen_real (pszServer, pszPort, DEFAULT_LISTEN_BACKLOG);
-}*/
-
 int createSocket_TCP_Listen_real (char * pszServer, char * pszPort, int nBacklog)
 {
     // This code is adapted from Beej's Network Programming guide which has a fantastic
@@ -237,6 +232,16 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+void processChat(char *msg, int msglen)
+{
+    printf("processing chat message: %s\n", msg);
+    int i;
+    for(i = 0; i < numPlayers; i++)
+    {
+        send(players[i]->socket, msg, msglen, 0);
+    }
+}
+
 void * Game_Instance(void *args)
 {
     struct gametArgs * myArgs;
@@ -300,6 +305,31 @@ void * Game_Instance(void *args)
 
     if(!playerApproved)
     {
+        g_autoptr(JsonBuilder) builder = json_builder_new();
+        json_builder_begin_object(builder);
+        json_builder_set_member_name(builder, "MessageType");
+        json_builder_add_string_value(builder, "JoinInstanceResult");
+        json_builder_set_member_name(builder, "Data");
+        json_builder_begin_object(builder);
+        json_builder_set_member_name(builder, "Name");
+        json_builder_add_string_value(builder, clientName);
+        json_builder_set_member_name(builder, "Number");
+        json_builder_add_int_value(builder, myNum);
+        json_builder_set_member_name(builder, "Result");
+        json_builder_add_string_value(builder, "No");
+        json_builder_end_object(builder);
+        json_builder_end_object(builder);
+
+        g_autoptr(JsonNode) root = json_builder_get_root(builder);
+        g_autoptr(JsonGenerator) g = json_generator_new();
+        json_generator_set_root(g, root);
+        const char *joinInstRes = json_generator_to_data(g, NULL);
+
+        printf("%s\n", joinInstRes);
+
+        uint16_t len = strlen(joinInstRes);
+        send(clientFD, joinInstRes, len, 0);
+        sleep(1);
         return NULL; //TODO: change lobby to be a while loop
     }
 
@@ -489,36 +519,57 @@ void * Game_Instance(void *args)
             memset(szBuffer, 0, BUFFER_MAX);
             int	 numBytes;
 
-            printf("Receiving from %d\n", clientFD);
-            if ((numBytes = recv(clientFD, szBuffer, MAXDATASIZE-1, 0)) == -1) {
-                perror("recv");
-                exit(1);
+            //loop until a non-chat message is received
+            while(1)
+            {
+                printf("Receiving from %d\n", clientFD);
+                if ((numBytes = recv(clientFD, szBuffer, MAXDATASIZE-1, 0)) == -1) {
+                    perror("recv");
+                    exit(1);
+                }
+
+                szBuffer[numBytes] = '\0';
+
+                // Debug / show what we got
+                printf("Received a message of %d bytes from Client\n", numBytes);
+                printf("   Message: %s\n", szBuffer);
+                // Do something with it
+                cmdParser = json_parser_new();
+                error = NULL;
+                json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
+                if(error != NULL)
+                {
+                    g_critical("Unable to parse command: %s", error->message);
+                    exit(1);
+                }
+                cmdRoot = json_parser_get_root(cmdParser);
+                cmdReader = json_reader_new(cmdRoot);
+                json_reader_read_member(cmdReader, "MessageType");
+                msgType = json_reader_get_string_value(cmdReader);
+                json_reader_end_member(cmdReader);
+
+                if(strcmp(msgType, "Chat") == 0)
+                {
+                    processChat(szBuffer, numBytes);
+                }
+                else
+                    break;
             }
 
-            szBuffer[numBytes] = '\0';
-
-            // Debug / show what we got
-            printf("Received a message of %d bytes from Client\n", numBytes);
-            printf("   Message: %s\n", szBuffer);
-            // Do something with it
-            g_autoptr(JsonParser) cmdParser = json_parser_new();
-            g_autoptr(GError) error = NULL;
+            cmdParser = json_parser_new();
+            error = NULL;
             json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
             if(error != NULL)
             {
                 g_critical("Unable to parse command: %s", error->message);
                 exit(1);
             }
-            g_autoptr(JsonNode) cmdRoot = json_parser_get_root(cmdParser);
-            g_autoptr(JsonReader) cmdReader = json_reader_new(cmdRoot);
+            cmdRoot = json_parser_get_root(cmdParser);
+            cmdReader = json_reader_new(cmdRoot);
             json_reader_read_member(cmdReader, "MessageType");
             msgType = json_reader_get_string_value(cmdReader);
             json_reader_end_member(cmdReader);
             json_reader_read_member(cmdReader, "Data");
-            // maybe process name
-            // json_reader_read_member(cmdReader, "Name");
-            // char* name = (char*)json_reader_get_string_value(cmdReader);
-            // json_reader_end_member(cmdReader);
             json_reader_read_member(cmdReader, "Guess");
             char *guess = (char*)json_reader_get_string_value(cmdReader);
             json_reader_end_member(cmdReader);
