@@ -22,6 +22,7 @@ respectively.
 <br>
 		all arguments are optional, and np is the number of players (default is 2), lp is the lobby port, pp is the play port, 
 		-d is the dictionary file, and -dbg is if the server should print debug messages
+<br> For the dictionary, the path must be specified from the project3 directory
 
 ## Extensions
 1. Guess results print in color for all players, where green is a correct letter in the correct spot and yellow is a correct letter in an incorrect spot
