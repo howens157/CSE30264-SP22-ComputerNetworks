@@ -30,3 +30,4 @@ respectively.
 3. Guesses may be entered in uppercase, lowercase, or some combination
 4. Guesses are checked to ensure entered characters are only letters
 5. Prints game statistics at the end of each game including the average accuracy for each player
+6. Prints chats in a different color based on who sent the chat
