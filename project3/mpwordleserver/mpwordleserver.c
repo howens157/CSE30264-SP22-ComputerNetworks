@@ -235,6 +235,16 @@ void processChat(char *msg, int msglen)
     }
 }
 
+void processChatLobby(char *msg, int msglen)
+{
+    int i;
+    for(i = 0; i < numPlayers; i++)
+    {
+        if(queue[i] != NULL)
+            send(queue[i]->socket, msg, msglen, 0);
+    }
+}
+
 void * Game_Instance(void *args)
 {
     struct gametArgs * myArgs;
@@ -291,8 +301,10 @@ void * Game_Instance(void *args)
     int i;
     for(i = 0; i < numPlayers; i++)
     {
-        if(nonces[i]->nonce == clientNonce && strcmp(clientName, nonces[i]->name))
+        printf("%d %d %s %s\n", nonces[i]->nonce, clientNonce, nonces[i]->name, clientName);
+        if(nonces[i]->nonce == clientNonce && strcmp(clientName, nonces[i]->name) == 0)
         {
+            printf("%s approved\n", clientName);
             playerApproved = true;
         }
     }
@@ -636,6 +648,54 @@ void * Game_Instance(void *args)
                 players[myNum-1]->score += 20.0*answerLen/((double)(currGuess));
             }
             check_guess_result(guess, (players[myNum-1]->result));
+
+            //loop until a non-chat message is received, client will send message 
+            //with the name mpwordle when the user has indicated that they would like to move
+            //on from chatting
+            while(1)
+            {
+                if ((numBytes = recv(clientFD, szBuffer, MAXDATASIZE-1, 0)) == -1) {
+                    perror("recv");
+                    exit(1);
+                }
+
+                szBuffer[numBytes] = '\0';
+
+                // Debug / show what we got
+                if(debug)
+                {
+                    printf("Received a message of %d bytes from Client\n", numBytes);
+                    printf("   Message: %s\n", szBuffer);
+                }
+                // Do something with it
+                cmdParser = json_parser_new();
+                error = NULL;
+                json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
+                if(error != NULL)
+                {
+                    g_critical("Unable to parse command: %s", error->message);
+                    exit(1);
+                }
+                cmdRoot = json_parser_get_root(cmdParser);
+                cmdReader = json_reader_new(cmdRoot);
+                json_reader_read_member(cmdReader, "MessageType");
+                msgType = json_reader_get_string_value(cmdReader);
+                json_reader_end_member(cmdReader);
+                json_reader_read_member(cmdReader, "Data");
+                json_reader_read_member(cmdReader, "Name");
+                char *name = (char*)json_reader_get_string_value(cmdReader);
+                json_reader_end_member(cmdReader);
+                json_reader_end_member(cmdReader);
+
+                if(strcmp(name, "mpwordle") == 0)
+                {
+                    break;
+                }
+                if(strcmp(msgType, "Chat") == 0)
+                {
+                    processChat(szBuffer, numBytes);
+                }
+            }
 
             pthread_mutex_lock(&lock);
             playersGuessed++;
@@ -997,6 +1057,54 @@ void * Server_Instance(void * args)
     send(clientFD, joinRes, len, 0);
     sleep(1);
 
+    //loop until a non-chat message is received, client will send message 
+    //with the name mpwordle when the user has indicated that they would like to move
+    //on from chatting
+    while(1)
+    {
+        if ((numBytes = recv(clientFD, szBuffer, MAXDATASIZE-1, 0)) == -1) {
+            perror("recv");
+            exit(1);
+        }
+
+        szBuffer[numBytes] = '\0';
+
+        // Debug / show what we got
+        if(debug)
+        {
+            printf("Received a message of %d bytes from Client\n", numBytes);
+            printf("   Message: %s\n", szBuffer);
+        }
+        // Do something with it
+        cmdParser = json_parser_new();
+        error = NULL;
+        json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
+        if(error != NULL)
+        {
+            g_critical("Unable to parse command: %s", error->message);
+            exit(1);
+        }
+        cmdRoot = json_parser_get_root(cmdParser);
+        cmdReader = json_reader_new(cmdRoot);
+        json_reader_read_member(cmdReader, "MessageType");
+        char *msgType = (char*)json_reader_get_string_value(cmdReader);
+        json_reader_end_member(cmdReader);
+        json_reader_read_member(cmdReader, "Data");
+        json_reader_read_member(cmdReader, "Name");
+        char *name = (char*)json_reader_get_string_value(cmdReader);
+        json_reader_end_member(cmdReader);
+        json_reader_end_member(cmdReader);
+
+        if(strcmp(name, "mpwordle") == 0)
+        {
+            break;
+        }
+        if(strcmp(msgType, "Chat") == 0)
+        {
+            processChatLobby(szBuffer, numBytes);
+        }
+    }
+
     //wait for the lobby to be full
     pthread_mutex_lock(&lock);
     queueWaiting++;
@@ -1055,6 +1163,11 @@ void Server_Lobby()
         int nClientCount = 0;
         nonces = (struct secStruct**)(malloc(numPlayers*sizeof(struct secStruct*)));
         int i;
+        //initialize the queue to NULL
+        for(i = 0; i < numPlayers; i++)
+        {
+            queue[i] = NULL;
+        }
         for(i = 0; i < numPlayers; i++)
         {
             struct sockaddr_storage their_addr;

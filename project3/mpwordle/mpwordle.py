@@ -61,9 +61,58 @@ def main():
 	retJSONstr = s.recv(1024).decode()
 	print('Lobby joined...')
 
+	print('Waiting for other players to join the lobby, enter a chat or just enter to proceed.')
 
-	# Receive StartInstance from server, get new port
-	retJSONstr = s.recv(1024).decode()
+	# Allow the user to send chat messages after submitting their guess
+	while True:
+		msg = input("Start your message with a $ to chat: ")
+		if msg == "":
+			cmdJSON = {}
+			cmdJSON["MessageType"] = "Chat"
+			cmdJSON["Data"] = {"Name":"mpwordle", "Text":"NoChat"}
+			cmdStr = json.dumps(cmdJSON)
+			s.sendall(cmdStr.encode())
+			break
+		if msg[0] == '$':
+			cmdJSON = {}
+			cmdJSON["MessageType"] = "Chat"
+			cmdJSON["Data"] = {"Name":playerName, "Text":str(msg[1:])}
+			cmdStr = json.dumps(cmdJSON)
+			s.sendall(cmdStr.encode())
+
+
+	# Receive StartInstance from server, get new port, handle chat
+	receivedStart = False
+	while True:
+		if receivedStart:
+			break
+		retJSONstr = s.recv(1024).decode()
+		print(retJSONstr)
+		try:
+			retJSON = json.loads(retJSONstr)
+			if retJSON["MessageType"] == "Chat":
+				player = retJSON["Data"]["Name"]
+				if player not in player_colors:
+					player_colors[player] = "\033[" + str(color) + "m"
+					color = color + 1
+				print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m')
+			else:
+				break
+		except:
+			# Handle the case in which multiple messages are sent
+			chatList = re.split('({[^}]*})', retJSONstr)
+			for jsonStr in chatList:
+				if not len(jsonStr) > 1:
+					continue
+				retJSON = json.loads(jsonStr + "}")
+				if retJSON["MessageType"] == "Chat":
+					player = retJSON["Data"]["Name"]
+					if player not in player_colors:
+						player_colors[player] = "\033[" + str(color) + "m"
+						color = color + 1
+					print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m')
+				else:
+					receivedStart = True
 	retJSON = json.loads(retJSONstr)
 	gamePORT = int(retJSON["Data"]["Port"])
 	server = retJSON["Data"]["Server"]
@@ -125,7 +174,7 @@ def main():
 
 		# Loop until someone gets it right or the server sends an EndRound
 		while True:
-			# Get user input for guess
+			# Get user input for guess or allow them to chat before inputting their guess
 			while True:
 				print("Start your message with a $ to chat")
 				guess = input("Input your guess or chat: ")
@@ -153,21 +202,20 @@ def main():
 				if receivedResponse:
 					break
 				retJSONstr = s.recv(1024).decode()
+				print(retJSONstr)
 				try:
 					retJSON = json.loads(retJSONstr)
 					if retJSON["MessageType"] == "Chat":
-						print('2Message Board:')
 						player = retJSON["Data"]["Name"]
 						if player not in player_colors:
-							player_colors[player] = "\033[" + str(color) + "m";
+							player_colors[player] = "\033[" + str(color) + "m"
 							color = color + 1
-						print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m\n')
+						print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m')
 					else:
 						break
 				except:
 					# Handle the case in which multiple messages are sent
 					chatList = re.split('({[^}]*})', retJSONstr)
-					print('Message Board:')
 					for jsonStr in chatList:
 						if not len(jsonStr) > 1:
 							continue
@@ -175,14 +223,63 @@ def main():
 						if retJSON["MessageType"] == "Chat":
 							player = retJSON["Data"]["Name"]
 							if player not in player_colors:
-								player_colors[player] = "\033[" + str(color) + "m";
+								player_colors[player] = "\033[" + str(color) + "m"
 								color = color + 1
-							print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m\n')
+							print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m')
 						else:
 							receivedResponse = True
 
+			print('Waiting for other players to submit their guess, enter a chat or just enter to proceed.')
+
+			# Allow the user to send chat messages after submitting their guess
+			while True:
+				msg = input("Start your message with a $ to chat: ")
+				if msg == "":
+					cmdJSON = {}
+					cmdJSON["MessageType"] = "Chat"
+					cmdJSON["Data"] = {"Name":"mpwordle", "Text":"NoChat"}
+					cmdStr = json.dumps(cmdJSON)
+					s.sendall(cmdStr.encode())
+					break
+				if msg[0] == '$':
+					cmdJSON = {}
+					cmdJSON["MessageType"] = "Chat"
+					cmdJSON["Data"] = {"Name":playerName, "Text":str(msg[1:])}
+					cmdStr = json.dumps(cmdJSON)
+					s.sendall(cmdStr.encode())
+			
 			# Get GuessResult from server, handle chat
-			retJSONstr = s.recv(1024).decode()	
+			receivedResult = False
+			while True:
+				if receivedResult:
+					break
+				retJSONstr = s.recv(1024).decode()
+				print(retJSONstr)
+				try:
+					retJSON = json.loads(retJSONstr)
+					if retJSON["MessageType"] == "Chat":
+						player = retJSON["Data"]["Name"]
+						if player not in player_colors:
+							player_colors[player] = "\033[" + str(color) + "m"
+							color = color + 1
+						print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m')
+					else:
+						break
+				except:
+					# Handle the case in which multiple messages are sent
+					chatList = re.split('({[^}]*})', retJSONstr)
+					for jsonStr in chatList:
+						if not len(jsonStr) > 1:
+							continue
+						retJSON = json.loads(jsonStr + "}")
+						if retJSON["MessageType"] == "Chat":
+							player = retJSON["Data"]["Name"]
+							if player not in player_colors:
+								player_colors[player] = "\033[" + str(color) + "m"
+								color = color + 1
+							print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m')
+						else:
+							receivedResult = True
 			retJSON = json.loads(retJSONstr)
 			winner = retJSON['Data']['Winner']
 			print("Guesses of this round:")
