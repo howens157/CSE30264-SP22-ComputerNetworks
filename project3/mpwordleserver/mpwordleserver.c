@@ -1,3 +1,15 @@
+//   mpwordleserver.c 
+//   4/27/2022
+//   Hayden Owens, Lauren Korbel, Riley Griffith
+//   CSE30264 - Computer Networks
+
+//   This code implements a multiplayer version of the game wordle, supporting 
+//   multiple players using threads, multiple games using multiprocessing, and
+//   a custom number of rounds and players per game.
+
+//   Usage:
+//        ./mpwordleserver/mpwordleserver -np X -lp X -pp X -nr X -d DFile -dbg
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -14,12 +26,13 @@
 #include <json-glib/json-glib.h>
 #include <json-glib/json-gobject.h>
 #include <sys/time.h>
-//#include "SocketHelper.h"
 
+//constants
 #define MAXDATASIZE 1024
 #define BUFFER_MAX 1000
 #define DEFAULT_LISTEN_BACKLOG      10
 
+//globabl vars for game logic
 int numPlayers; //change to 2
 char *lobPort;
 int gamePort;
@@ -35,6 +48,7 @@ bool someoneWon = false;
 bool winnerChosen = false;
 char *theWinner;
 
+//array of player info structs so every client thread can access the result and scores of other players
 struct gametArgs **players;
 
 struct gametArgs
@@ -49,6 +63,7 @@ struct gametArgs
     double lastReceipt;
 };
 
+//array of info for waiting players
 struct servertArgs
 {
     pthread_t threadClient;
@@ -60,6 +75,7 @@ struct servertArgs
 int queueWaiting = 0;
 struct servertArgs **queue;
 
+//array of nonce name pairs for checking validity of clients who try to join the game
 struct secStruct {
     char *name;
     int nonce;
@@ -67,10 +83,11 @@ struct secStruct {
 
 struct secStruct **nonces;
 
-
+//initialize global lock and condition variable
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
+//choose a random word from the dictionary file and set the global answer to it
 void choose_answer() {
 	printf("using dictionary %s\n", dictFile);
 	FILE* fp = fopen(dictFile, "r");
@@ -118,6 +135,8 @@ void choose_answer() {
     }
 }
 
+//takes a guess and a blank result char* and sets result to the BYG string representing the
+//result of the guess
 void check_guess_result(char* guess, char *result) {
 	for (int i = 0; i < strlen(guess); i++) {
 		int letter_printed = 0;
@@ -141,6 +160,7 @@ void check_guess_result(char* guess, char *result) {
 	return;
 }
 
+//taken from provided socket helper file
 int createSocket_TCP_Listen_real (char * pszServer, char * pszPort, int nBacklog)
 {
     // This code is adapted from Beej's Network Programming guide which has a fantastic
@@ -212,6 +232,7 @@ int createSocket_TCP_Listen_real (char * pszServer, char * pszPort, int nBacklog
     return serverSocket;
 }
 
+//take from provided socket helper file
 int createSocket_TCP_Listen (char * pszServer, char * pszPort)
 {
     return createSocket_TCP_Listen_real (pszServer, pszPort, DEFAULT_LISTEN_BACKLOG);
@@ -226,6 +247,7 @@ void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
+//send a chat msg to every player in the players array
 void processChat(char *msg, int msglen)
 {
     int i;
@@ -235,6 +257,7 @@ void processChat(char *msg, int msglen)
     }
 }
 
+//send a chat msg to every player in the queue array
 void processChatLobby(char *msg, int msglen)
 {
     int i;
@@ -245,8 +268,10 @@ void processChatLobby(char *msg, int msglen)
     }
 }
 
+//function for client threads to run during the game
 void * Game_Instance(void *args)
 {
+    //deconstruct the provided args
     struct gametArgs * myArgs;
     struct gametArgs threadArgs;
 
@@ -272,7 +297,8 @@ void * Game_Instance(void *args)
         printf("Received a message of %d bytes from Client\n", numBytes);
         printf("   Message: %s\n", szBuffer);
     }
-    // Do something with it
+    
+    // Parse the received command
     g_autoptr(JsonParser) cmdParser = json_parser_new();
     g_autoptr(GError) error = NULL;
     json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
@@ -295,20 +321,19 @@ void * Game_Instance(void *args)
     json_reader_end_member(cmdReader);
     json_reader_end_member(cmdReader);				
     
-    //TODO check that nonce is one of the approved nonces 
+    //check that nonce is one of the approved nonces 
     int clientNonce = nonce;
     bool playerApproved = false;
     int i;
     for(i = 0; i < numPlayers; i++)
     {
-        printf("%d %d %s %s\n", nonces[i]->nonce, clientNonce, nonces[i]->name, clientName);
         if(nonces[i]->nonce == clientNonce && strcmp(clientName, nonces[i]->name) == 0)
         {
-            printf("%s approved\n", clientName);
             playerApproved = true;
         }
     }
 
+    //if the player was not approved send them a JoinInstanceResult msg with a Result of No and return
     if(!playerApproved)
     {
         g_autoptr(JsonBuilder) builder = json_builder_new();
@@ -340,13 +365,15 @@ void * Game_Instance(void *args)
         uint16_t len = strlen(joinInstRes);
         send(clientFD, joinInstRes, len, 0);
         sleep(1);
-        return NULL; //TODO: change lobby to be a while loop
+        return NULL; 
     }
 
+    //initialize the name, score, and iWon fields in this clients spot in the players aray
     strcpy((players[myNum-1]->name), clientName); 
     players[myNum-1]->score = 0.0;
     players[myNum-1]->iWon = false;
 
+    //If the player was approved, send them a JoinInstanceResult
     g_autoptr(JsonBuilder) builder = json_builder_new();
     json_builder_begin_object(builder);
     json_builder_set_member_name(builder, "MessageType");
@@ -432,11 +459,13 @@ void * Game_Instance(void *args)
 
     sleep(1);
 
+    //loop for numRounds times
     for(currRound = 1; currRound <= numRounds; currRound++)
     {
+        //initialize game variables
         players[myNum-1]->iWon = false;
         memset(players[myNum-1]->result, 0, 256);
-        //initialize game variables
+        //player 1 is tasked with doing gameWide actions such as choosing an answer
         if(myNum == 1)
         {
             choose_answer();
@@ -447,6 +476,7 @@ void * Game_Instance(void *args)
             pthread_mutex_unlock(&lock);
         }
 
+        //wait until an answer is chosen
         pthread_mutex_lock(&lock);
         while(!answerChosen)
         {
@@ -454,7 +484,6 @@ void * Game_Instance(void *args)
         }
         pthread_mutex_unlock(&lock);
 
-        //answer = "HELLO";
         int answerLen = strlen(answer);
         if(debug)
         {
@@ -506,6 +535,7 @@ void * Game_Instance(void *args)
         send(clientFD, startRound, len, 0);
         sleep(1);
 
+        //loop for numGuesses guesses
         int currGuess;
         for(currGuess = 1; currGuess <= numGuesses; currGuess++)
         {
@@ -539,7 +569,6 @@ void * Game_Instance(void *args)
             len = strlen(promptGuess);
             send(clientFD, promptGuess, len, 0);
 
-            // receive Guess message
             memset(szBuffer, 0, BUFFER_MAX);
             int	 numBytes;
 
@@ -553,13 +582,14 @@ void * Game_Instance(void *args)
 
                 szBuffer[numBytes] = '\0';
 
-                // Debug / show what we got
+                // Debug
                 if(debug)
                 {
                     printf("Received a message of %d bytes from Client\n", numBytes);
                     printf("   Message: %s\n", szBuffer);
                 }
-                // Do something with it
+
+                // Parse the received message
                 cmdParser = json_parser_new();
                 error = NULL;
                 json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
@@ -574,14 +604,17 @@ void * Game_Instance(void *args)
                 msgType = json_reader_get_string_value(cmdReader);
                 json_reader_end_member(cmdReader);
 
+                //if it was a chat message, just forward it along
                 if(strcmp(msgType, "Chat") == 0)
                 {
                     processChat(szBuffer, numBytes);
                 }
+                //otherwise break to parse it as a Guess
                 else
                     break;
             }
 
+            //Parse the received message as a Guess message
             cmdParser = json_parser_new();
             error = NULL;
             json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
@@ -639,7 +672,7 @@ void * Game_Instance(void *args)
 
             sleep(1);
             
-            //check client's guess
+            //check client's guess and set the client's spot in the players array
             if (!strncmp(answer, guess, answerLen)) {
                 pthread_mutex_lock(&lock);
                 someoneWon = true;
@@ -667,7 +700,7 @@ void * Game_Instance(void *args)
                     printf("Received a message of %d bytes from Client\n", numBytes);
                     printf("   Message: %s\n", szBuffer);
                 }
-                // Do something with it
+                // Parse the message
                 cmdParser = json_parser_new();
                 error = NULL;
                 json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
@@ -687,10 +720,12 @@ void * Game_Instance(void *args)
                 json_reader_end_member(cmdReader);
                 json_reader_end_member(cmdReader);
 
+                //if the message is from mpwordle, break to continue
                 if(strcmp(name, "mpwordle") == 0)
                 {
                     break;
                 }
+                //otherwise, forward it along to the other players
                 if(strcmp(msgType, "Chat") == 0)
                 {
                     processChat(szBuffer, numBytes);
@@ -765,7 +800,7 @@ void * Game_Instance(void *args)
             send(clientFD, GuessResult, len, 0);
             sleep(1); 
 
-            //reset playersGuessed for new guess
+            //reset playersGuessed for new guess. Player 1's thread is tasked with handling game wide tasks
             if(myNum == 1)
             {
                 pthread_mutex_lock(&lock);
@@ -782,7 +817,6 @@ void * Game_Instance(void *args)
             pthread_mutex_unlock(&lock);
 
             // Decision point – was the guess successful or are there more rounds of guessing allowed?
-                // Fill in that code later
             if(someoneWon)
             {
                 if(players[myNum-1]->iWon == false)
@@ -933,14 +967,17 @@ void * Game_Instance(void *args)
     return NULL;
 }
 
+//Gather players for the newly created Game
 void Game_Lobby(int portNum)
 {
+    //initialize the players array
     players = (struct gametArgs**)(malloc(numPlayers*sizeof(struct gametArgs*)));
     char myPort[100];
     sprintf(myPort, "%d", portNum);
     int serverFD =  createSocket_TCP_Listen(NULL, myPort);
     int nClientCount = 0;
 
+    //accept numPlayers connections
     int i;
     for(i = 0; i < numPlayers; i++)
     {
@@ -963,18 +1000,17 @@ void Game_Lobby(int portNum)
                 get_in_addr((struct sockaddr *)&their_addr),
                 s, sizeof s);
         printf("server: got connection from %s\n", s);
+        //initialize players array variables
         nClientCount++;
         players[nClientCount-1] = (struct gametArgs*)(malloc(sizeof(struct gametArgs)));
         players[nClientCount-1]->socket = clientFD;
         players[nClientCount-1]->myNum = nClientCount;
 
+        //spawn a new Game_Instance thread
         pthread_create(&(players[nClientCount-1]->threadClient), NULL, Game_Instance, (players[nClientCount-1]));
     }
-
-    pthread_mutex_lock(&lock);
-    pthread_cond_broadcast(&cond);
-    pthread_mutex_unlock(&lock);
     
+    //join the threads for all players
     for(i = 0; i < numPlayers; i++)
     {
         pthread_join(players[i]->threadClient, NULL);
@@ -982,8 +1018,10 @@ void Game_Lobby(int portNum)
 
 }
 
+//thread function for a client waiting in the lobby
 void * Server_Instance(void * args)
 {
+    //deconstruct args
     struct servertArgs * myArgs;
     struct servertArgs threadArgs;
 
@@ -1011,7 +1049,7 @@ void * Server_Instance(void * args)
         printf("Received a message of %d bytes from Client\n", numBytes);
         printf("   Message: %s\n", szBuffer);
     }
-    // Do something with it
+    // Parse the join message
     g_autoptr(JsonParser) cmdParser = json_parser_new();
     g_autoptr(GError) error = NULL;
     json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
@@ -1069,13 +1107,13 @@ void * Server_Instance(void * args)
 
         szBuffer[numBytes] = '\0';
 
-        // Debug / show what we got
+        // Debug 
         if(debug)
         {
             printf("Received a message of %d bytes from Client\n", numBytes);
             printf("   Message: %s\n", szBuffer);
         }
-        // Do something with it
+        // Parse the message
         cmdParser = json_parser_new();
         error = NULL;
         json_parser_load_from_data(cmdParser, szBuffer, numBytes, &error);
@@ -1095,10 +1133,12 @@ void * Server_Instance(void * args)
         json_reader_end_member(cmdReader);
         json_reader_end_member(cmdReader);
 
+        //if the message is from mpwordle, continue to the next stage
         if(strcmp(name, "mpwordle") == 0)
         {
             break;
         }
+        //otherwise, forward it along to the other players waiting in the lobby
         if(strcmp(msgType, "Chat") == 0)
         {
             processChatLobby(szBuffer, numBytes);
@@ -1115,6 +1155,7 @@ void * Server_Instance(void * args)
     }
     pthread_mutex_unlock(&lock);
 
+    //create nonces and store the nonce,name pair in the nonces array
     int nonce = rand() % 1000000;
     nonces[myNum-1] = (struct secStruct*)(malloc(sizeof(struct secStruct)));
     nonces[myNum-1]->name = name;
@@ -1153,12 +1194,15 @@ void * Server_Instance(void * args)
     return NULL;
 }
 
+//Gather players in the Lobby until there are enough for a game, then fork to create the new game,
+//and continue gathering for the next game
 void Server_Lobby()
 {
-    
+    //create a socket to listen on
     int serverFD =  createSocket_TCP_Listen(NULL, lobPort);
     while(1)
     {
+        //reset queue and nonces
         queue = (struct servertArgs**)(malloc(numPlayers*sizeof(struct servertArgs*)));
         int nClientCount = 0;
         nonces = (struct secStruct**)(malloc(numPlayers*sizeof(struct secStruct*)));
@@ -1168,6 +1212,7 @@ void Server_Lobby()
         {
             queue[i] = NULL;
         }
+        //accept numPlayers connections
         for(i = 0; i < numPlayers; i++)
         {
             struct sockaddr_storage their_addr;
@@ -1188,32 +1233,35 @@ void Server_Lobby()
                     get_in_addr((struct sockaddr *)&their_addr),
                     s, sizeof s);
             printf("server: got connection from %s\n", s);
+            //set variables in the global queue array
             nClientCount++;
             queue[nClientCount-1] = (struct servertArgs*)(malloc(sizeof(struct servertArgs)));
             queue[nClientCount-1]->socket = clientFD;
             queue[nClientCount-1]->number = nClientCount;
             queue[nClientCount-1]->nextPort = gamePort;
 
+            //spawn a new Server_Instance thread for the connection
             pthread_create(&(queue[nClientCount-1]->threadClient), NULL, Server_Instance, (queue[nClientCount-1]));
         }
-
-        pthread_mutex_lock(&lock);
-        pthread_cond_broadcast(&cond);
-        pthread_mutex_unlock(&lock);
         
+        //join all threads in the queue
         for(i = 0; i < numPlayers; i++)
         {
             pthread_join(queue[i]->threadClient, NULL);
         }
 
+        //fork to create a new process
         int cpid = fork();
 
+        //in the child, run Game_Lobby to receive the connections and start a new game
         if(cpid == 0)
         {
             Game_Lobby(gamePort);
             return;
         }
 
+        //in the parent, free the allocated memory, reset queueWaiting, and increment the port 
+        //for the next game to run on
         for(i = 0; i < numPlayers; i++)
         {
             free(nonces[i]);
@@ -1233,6 +1281,7 @@ int main(int argc, char *argv[])
     // seed random number
     srand(time(0));
 
+    //default for all args
     numPlayers = 2; 
     lobPort = "41100";
     gamePort = 41101;
@@ -1245,7 +1294,7 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-    //Process 
+    //Process the args
     int i;
     for(i = 1; i < argc; i++)
     {
@@ -1287,6 +1336,7 @@ int main(int argc, char *argv[])
     printf("Dictionary: %s\n", dictFile);
     printf("Should debug: %s\n", (debug) ? "True" : "False");
 	
+    //Start the lobby
 	Server_Lobby();
 
     return 0;

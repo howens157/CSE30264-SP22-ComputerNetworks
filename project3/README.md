@@ -12,7 +12,7 @@ respectively.
 <br><br>
 		client:
 <br>
-		./mywordle/mpwordle.py -name X -server X -port X
+		./mpwordle/mpwordle.py -name X -server X -port X
 <br>
 		where name is the player's name and server and port are where the client should connect to the server
 <br><br>

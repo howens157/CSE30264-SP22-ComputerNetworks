@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 
-#  mycal.py 
-#  3/25/2022
+#  mpwordle.py 
+#  4/27/2022
 #  Hayden Owens, Lauren Korbel, Riley Griffith
 #  CSE30264 - Computer Networks
 #
-#  This code implements a calendar client that connects to a server and issues 
-#  commands to modify or retrieve calendar data
+#  This code implements the client end of a multiplayer wordle game supporting chat and multiple rounds
 #
 #  Usage:
-#       ./mycal.py calName command args
+#       ./mpwordle/mpwordle.py -name X -server X -port X
 
 import socket
 import json
@@ -23,6 +22,7 @@ def error():
 	exit(1)
 
 def main():
+	#initialize stats and colors dicts
 	playerStats = {}
 
 	player_colors = {}
@@ -66,6 +66,7 @@ def main():
 	# Allow the user to send chat messages after submitting their guess
 	while True:
 		msg = input("Start your message with a $ to chat: ")
+		#if the user just entered to skip chatting, send the appropriate msg to the server
 		if msg == "":
 			cmdJSON = {}
 			cmdJSON["MessageType"] = "Chat"
@@ -73,6 +74,7 @@ def main():
 			cmdStr = json.dumps(cmdJSON)
 			s.sendall(cmdStr.encode())
 			break
+		#if the user entered a chat msg, send it to the server and reprompt
 		if msg[0] == '$':
 			cmdJSON = {}
 			cmdJSON["MessageType"] = "Chat"
@@ -86,8 +88,10 @@ def main():
 	while True:
 		if receivedStart:
 			break
+		#recv a msg
 		retJSONstr = s.recv(1024).decode()
 		print(retJSONstr)
+		#try to process it as JSON (will only work if only one msg is queued up)
 		try:
 			retJSON = json.loads(retJSONstr)
 			if retJSON["MessageType"] == "Chat":
@@ -113,12 +117,14 @@ def main():
 					print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m')
 				else:
 					receivedStart = True
+	#process the msg as a StartInstance
 	retJSON = json.loads(retJSONstr)
 	gamePORT = int(retJSON["Data"]["Port"])
 	server = retJSON["Data"]["Server"]
 	nonce = retJSON["Data"]["Nonce"]
 	print(f'Joining game at port {gamePORT} on {server}...')
 	
+	#short sleep to ensure the server has time to start listening for the game
 	time.sleep(2)
 
 	# Close lobby connection, open game connection
@@ -143,17 +149,18 @@ def main():
 	print('Game server joined...')
 
 	# Receive StartGame from server
-	
 	retJSONstr = s.recv(1024).decode()
 	retJSON = json.loads(retJSONstr)
 	gameRounds = int(retJSON["Data"]["Rounds"])
 	print('\nWelcome to Multiplayer Wordle!')
 	print(f'There will be {gameRounds} rounds.')
 			
+	#create an entry in playerStats for every player in the game
 	players = retJSON["Data"]["PlayerInfo"]
 	for player in players:
 		playerStats[player['Name']] = [] 
 
+	#loop for the correct number of rounds
 	for rnd in range(gameRounds):
 		print(f'ROUND {rnd+1}:\n----------')
 
@@ -178,6 +185,8 @@ def main():
 			while True:
 				print("Start your message with a $ to chat")
 				guess = input("Input your guess or chat: ")
+				if guess == "":
+					continue
 				if guess[0] == '$':
 					cmdJSON = {}
 					cmdJSON["MessageType"] = "Chat"
@@ -187,9 +196,11 @@ def main():
 				else:
 					if len(guess) == wordLen and guess.isalpha():
 						break
-					else:
+					elif len(guess) != wordLen:
 						print("Input is incorrect length, word is " + str(wordLen) + " characters")
-					
+					else:
+						print("Please only guess alphabetic characters")
+			#send the input as the guess once the user is done chatting
 			cmdJSON = {}
 			cmdJSON["MessageType"] = "Guess"
 			cmdJSON["Data"] = {"Name":playerName, "Guess":str(guess).upper()}
@@ -283,6 +294,7 @@ def main():
 			retJSON = json.loads(retJSONstr)
 			winner = retJSON['Data']['Winner']
 			print("Guesses of this round:")
+			#print the results of the round for every player, color coded according to the BYG string
 			for result in retJSON['Data']['PlayerInfo']:
 				playerStats[result['Name']][rnd] = result['Result']
 				i = 0
