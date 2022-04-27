@@ -71,7 +71,8 @@ struct secStruct **nonces;
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t cond = PTHREAD_COND_INITIALIZER;
 
-void choose_answer() {\
+void choose_answer() {
+	printf("using dictionary %s\n", dictFile);
 	FILE* fp = fopen(dictFile, "r");
 	if (!fp) {
 		fprintf(stderr, "error: could not open dictionary\n");

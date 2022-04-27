@@ -25,6 +25,9 @@ def error():
 def main():
 	playerStats = {}
 
+	player_colors = {}
+	color = 92
+
 	# Parse command line arguments
 	argc = len(sys.argv)
 	argv = sys.argv
@@ -44,7 +47,7 @@ def main():
 
 	# create socket, connect to server
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	s.connect((HOST, 41100))
+	s.connect((HOST, PORT))
 
 	# Send initial Join JSON
 	cmdJSON = {}
@@ -154,7 +157,11 @@ def main():
 					retJSON = json.loads(retJSONstr)
 					if retJSON["MessageType"] == "Chat":
 						print('2Message Board:')
-						print(f'\t{retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}')
+						player = retJSON["Data"]["Name"]
+						if player not in player_colors:
+							player_colors[player] = "\033[" + str(color) + "m";
+							color = color + 1
+						print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m\n')
 					else:
 						break
 				except:
@@ -166,7 +173,11 @@ def main():
 							continue
 						retJSON = json.loads(jsonStr + "}")
 						if retJSON["MessageType"] == "Chat":
-							print(f'\t{retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]}')
+							player = retJSON["Data"]["Name"]
+							if player not in player_colors:
+								player_colors[player] = "\033[" + str(color) + "m";
+								color = color + 1
+							print(f'{player_colors[player]} chat from {retJSON["Data"]["Name"]}: {retJSON["Data"]["Text"]} \033[0m\n')
 						else:
 							receivedResponse = True
 
